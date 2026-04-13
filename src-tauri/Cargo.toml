@@ -1,0 +1,30 @@
+[package]
+name = "siren-music-download"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform lossless music downloader for Monster Siren Records"
+license = "MIT"
+
+[[bin]]
+name = "siren-music-download"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+dirs = "5"
+hound = "3"
+rodio = "0.19"
+serde = { version = "1", features = ["derive"] }
+siren_core = { path = "../crates/siren-core" }
+tauri = { version = "2", features = ["custom-protocol"] }
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["full"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+coreaudio-rs = "0.11"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+cpal = "0.15"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

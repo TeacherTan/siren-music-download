@@ -1,0 +1,19 @@
+[package]
+name = "siren_core"
+version = "0.1.0"
+edition = "2021"
+description = "Shared core library for Siren Music Download"
+license = "MIT"
+
+[lib]
+name = "siren_core"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+flacenc = "0.5"
+futures = "0.3"
+hound = "3"
+metaflac = "0.2"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+serde = { version = "1", features = ["derive"] }

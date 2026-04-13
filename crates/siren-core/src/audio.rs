@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+use flacenc::component::BitRepr;
+use flacenc::error::Verify;
 use std::path::{Path, PathBuf};
 
 /// Detected audio format from raw bytes
@@ -43,8 +45,7 @@ pub enum OutputFormat {
     /// Keep as WAV (lossless, direct from API — no conversion needed)
     #[default]
     Wav,
-    /// Convert WAV → FLAC via ffmpeg (lossless, smaller, better metadata)
-    /// Requires `ffmpeg` to be available on PATH.
+    /// Convert WAV → FLAC in pure Rust (lossless, smaller, better metadata)
     Flac,
     /// Keep MP3 as-is
     Mp3,
@@ -54,7 +55,7 @@ impl OutputFormat {
     pub fn label(self) -> &'static str {
         match self {
             OutputFormat::Wav => "WAV (Lossless)",
-            OutputFormat::Flac => "FLAC (Lossless, via ffmpeg)",
+            OutputFormat::Flac => "FLAC (Lossless)",
             OutputFormat::Mp3 => "MP3",
         }
     }
@@ -73,7 +74,7 @@ pub fn sanitize_filename(name: &str) -> String {
 }
 
 /// Save audio bytes to disk.
-/// - WAV + OutputFormat::Flac: converts via `ffmpeg` (must be on PATH)
+/// - WAV + OutputFormat::Flac: converts in pure Rust via flacenc
 /// - Everything else: written as-is with appropriate extension
 ///
 /// Returns the path of the file written.
@@ -96,29 +97,35 @@ pub fn save_audio(
     let out_path = out_dir.join(format!("{safe_name}.{out_ext}"));
 
     if detected == AudioFormat::Wav && output_format == OutputFormat::Flac {
-        // Write WAV to a temp file then convert with ffmpeg
-        let tmp_wav = out_dir.join(format!(".{safe_name}_tmp.wav"));
-        std::fs::write(&tmp_wav, data).context("Failed to write temp WAV")?;
+        // Decode WAV samples with hound
+        let cursor = std::io::Cursor::new(data);
+        let mut reader = hound::WavReader::new(cursor).context("Failed to read WAV data")?;
+        let spec = reader.spec();
 
-        let status = std::process::Command::new("ffmpeg")
-            .args([
-                "-y",
-                "-i",
-                tmp_wav.to_str().unwrap(),
-                "-c:a",
-                "flac",
-                out_path.to_str().unwrap(),
-            ])
-            .output()
-            .context("Failed to run ffmpeg — ensure ffmpeg is installed and on PATH")?;
+        let samples: Vec<i32> = reader
+            .samples::<i32>()
+            .collect::<Result<_, _>>()
+            .context("Failed to read WAV samples")?;
 
-        let _ = std::fs::remove_file(&tmp_wav);
-
-        anyhow::ensure!(
-            status.status.success(),
-            "ffmpeg exited with error: {}",
-            String::from_utf8_lossy(&status.stderr)
+        // Encode to FLAC in pure Rust via flacenc
+        let config = flacenc::config::Encoder::default()
+            .into_verified()
+            .map_err(|e| anyhow::anyhow!("FLAC encoder config error: {:?}", e))?;
+        let source = flacenc::source::MemSource::from_samples(
+            &samples,
+            spec.channels as usize,
+            spec.bits_per_sample as usize,
+            spec.sample_rate as usize,
         );
+        let flac_stream =
+            flacenc::encode_with_fixed_block_size(&config, source, config.block_size)
+                .map_err(|e| anyhow::anyhow!("FLAC encoding failed: {:?}", e))?;
+        let mut sink = flacenc::bitsink::ByteSink::new();
+        flac_stream
+            .write(&mut sink)
+            .map_err(|e| anyhow::anyhow!("FLAC write failed: {:?}", e))?;
+
+        std::fs::write(&out_path, sink.as_slice()).context("Failed to write FLAC file")?;
     } else {
         std::fs::write(&out_path, data).context("Failed to write audio file")?;
     }

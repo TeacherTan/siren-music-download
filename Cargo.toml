@@ -1,27 +1,9 @@
-[package]
-name = "siren-music-download"
-version = "0.1.0"
-edition = "2021"
-description = "Cross-platform lossless music downloader for Monster Siren Records"
-license = "MIT"
+[workspace]
+members = ["src-tauri", "crates/siren-core"]
+resolver = "2"
 
-[dependencies]
-slint = "1.9"
-tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-futures = "0.3"
-anyhow = "1"
-hound = "3"          # WAV read/write
-metaflac = "0.2"     # FLAC metadata tagging
-tokio-util = { version = "0.7", features = ["io"] }
-bytes = "1"
-dirs = "5"
-
-[build-dependencies]
-slint-build = "1.9"
-
-[[bin]]
-name = "siren-music-download"
-path = "src/main.rs"
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

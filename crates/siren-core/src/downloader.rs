@@ -4,6 +4,13 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// Optional metadata overrides applied when tagging downloaded FLAC files.
+/// Empty strings/vecs mean "use the value from the API".
+pub struct MetaOverride {
+    pub album_name: String,
+    pub artists: Vec<String>,
+}
+
 /// Progress event emitted during a download
 #[derive(Debug, Clone)]
 pub struct DownloadProgress {
@@ -25,6 +32,7 @@ pub async fn download_song(
     album: &AlbumDetail,
     out_dir: &Path,
     format: OutputFormat,
+    meta: &MetaOverride,
     on_progress: impl Fn(DownloadProgress) + Send + 'static,
 ) -> Result<PathBuf> {
     // Fetch cover art (best-effort)
@@ -51,16 +59,18 @@ pub async fn download_song(
 
     let out_path = save_audio(&audio_bytes, out_dir, &song.name, format)?;
 
-    // Tag FLAC files with metadata
+    // Tag FLAC files with metadata (apply overrides if provided)
     if AudioFormat::detect(&audio_bytes) == AudioFormat::Flac
         || (AudioFormat::detect(&audio_bytes) == AudioFormat::Wav && format == OutputFormat::Flac)
     {
         if out_path.extension().and_then(|e| e.to_str()) == Some("flac") {
+            let eff_album = if meta.album_name.is_empty() { &album.name } else { &meta.album_name };
+            let eff_artists = if meta.artists.is_empty() { &song.artists } else { &meta.artists };
             let _ = tag_flac(
                 &out_path,
                 &song.name,
-                &song.artists,
-                &album.name,
+                eff_artists,
+                eff_album,
                 cover_bytes.as_deref(),
             );
         }

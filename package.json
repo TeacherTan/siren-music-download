@@ -1,0 +1,29 @@
+{
+  "name": "siren-music-download",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "基于 [Rust](https://www.rust-lang.org/) + [Tauri 2](https://tauri.app/) 构建的跨平台无损音乐下载工具，支持从[塞壬唱片官网](https://monster-siren.hypergryph.com/)下载全部专辑及曲目。",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "^2.7.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@tauri-apps/cli": "^2.9.2",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "svelte": "^5.55.2",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.8"
+  }
+}
