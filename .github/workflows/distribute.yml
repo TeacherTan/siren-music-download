@@ -27,16 +27,19 @@ jobs:
             target: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
             artifact_glob: target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+            asset_suffix: darwin_x64.dmg
           - name: macOS Apple Silicon
             runner: macos-15
             target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
             artifact_glob: target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            asset_suffix: darwin_aarch64.dmg
           - name: Windows x64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
             args: --target x86_64-pc-windows-msvc --bundles nsis
             artifact_glob: target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            asset_suffix: windows_x64.exe
 
     steps:
       - name: Checkout repository
@@ -60,8 +63,7 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Build workflow artifacts
-        if: github.ref_type != 'tag' && !(github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
+      - name: Build desktop bundle
         uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -71,32 +73,59 @@ jobs:
           args: ${{ matrix.args }}
           includeDebug: false
           includeUpdaterJson: false
+
+      - name: Collect installer asset
+        id: collect_asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          asset_name="siren-music-download_${version}_${{ matrix.asset_suffix }}"
+          shopt -s nullglob
+          files=( ${{ matrix.artifact_glob }} )
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "Expected exactly one installer, got ${#files[@]}" >&2
+            printf '%s\n' "${files[@]}"
+            exit 1
+          fi
+          mkdir -p release-assets
+          cp "${files[0]}" "release-assets/${asset_name}"
+          echo "asset_name=${asset_name}" >> "$GITHUB_OUTPUT"
+          echo "asset_path=release-assets/${asset_name}" >> "$GITHUB_OUTPUT"
 
       - name: Upload workflow artifacts
         if: github.ref_type != 'tag' && !(github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.target }}-installer
-          path: ${{ matrix.artifact_glob }}
+          path: ${{ steps.collect_asset.outputs.asset_path }}
           if-no-files-found: error
           compression-level: 0
 
-      - name: Build and upload release assets
+      - name: Ensure GitHub Release exists
         if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
-        uses: tauri-apps/tauri-action@v0.6.2
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: .
-          tauriScript: npx tauri
-          args: ${{ matrix.args }}
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag }}
-          releaseCommitish: ${{ github.sha }}
-          releaseName: Siren Music Download ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag }}
-          releaseBody: Automated desktop build artifacts for macOS and Windows.
-          releaseDraft: false
-          prerelease: ${{ contains(github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag, '-') }}
-          generateReleaseNotes: true
-          includeDebug: false
-          includeUpdaterJson: false
-          assetNamePattern: '[name]_[version]_[platform]_[arch][ext]'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag }}
+          RELEASE_NAME: Siren Music Download ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag }}
+          PRERELEASE: ${{ contains(github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag, '-') }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            args=(release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$RELEASE_NAME" --generate-notes)
+            if [ "$PRERELEASE" = "true" ]; then
+              args+=(--prerelease)
+            fi
+            gh "${args[@]}" || gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1
+          fi
+
+      - name: Upload release asset
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" "${{ steps.collect_asset.outputs.asset_path }}" --repo "$GITHUB_REPOSITORY" --clobber
