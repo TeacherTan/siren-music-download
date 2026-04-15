@@ -59,9 +59,16 @@ jobs:
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
           includeDebug: false
-          uploadUpdaterJson: false
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: '[platform]-[arch]-[bundle]'
+          includeUpdaterJson: false
+
+      - name: Upload workflow artifacts
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.target }}-bundle
+          path: target/${{ matrix.target }}/release/bundle/**
+          if-no-files-found: error
+          compression-level: 0
 
       - name: Build and upload release assets
         if: github.ref_type == 'tag'
@@ -79,7 +86,5 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           generateReleaseNotes: true
           includeDebug: false
-          uploadUpdaterJson: false
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: '[platform]-[arch]-[bundle]'
-          releaseAssetNamePattern: '[name]_[version]_[platform]_[arch][ext]'
+          includeUpdaterJson: false
+          assetNamePattern: '[name]_[version]_[platform]_[arch][ext]'
