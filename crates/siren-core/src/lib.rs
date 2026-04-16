@@ -28,5 +28,6 @@ pub use download::model::{
 pub use download::service::DownloadService;
 pub use downloader::{
     album_cover_exists, album_output_dir, download_album_cover, download_song,
-    write_album_cover_bytes, DownloadProgress, MetaOverride,
+    download_song_phase1, write_album_cover_bytes, write_payload_to_disk, DownloadProgress,
+    MetaOverride, OwnedFlacMetadata, WritePayload,
 };

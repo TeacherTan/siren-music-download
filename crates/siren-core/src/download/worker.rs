@@ -3,12 +3,24 @@
 //! The worker is responsible for the actual file download, format conversion,
 //! metadata tagging, and lyric sidecar writing by delegating to the existing
 //! `download_song` function.
+//!
+//! ## Pipeline support
+//!
+//! In addition to the monolithic [`InternalDownloadTask::execute`], two
+//! split-phase methods are provided for pipelined execution:
+//!
+//! - [`InternalDownloadTask::execute_download_phase`] — network I/O only,
+//!   returns a [`WritePayload`].
+//! - [`InternalDownloadTask::execute_write_phase`] — disk I/O only, consumes
+//!   a [`WritePayload`].
 
 use crate::api::ApiClient;
 use crate::download::model::{
     DownloadErrorCode, DownloadErrorInfo, DownloadTaskProgressEvent, InternalDownloadTask,
 };
-use crate::downloader::{download_song, MetaOverride};
+use crate::downloader::{
+    download_song, download_song_phase1, write_payload_to_disk, MetaOverride, WritePayload,
+};
 use anyhow::Error;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -27,7 +39,7 @@ pub enum TaskExecutionResult {
 }
 
 impl InternalDownloadTask {
-    /// Execute this download task.
+    /// Execute this download task (monolithic: download + write).
     ///
     /// This method downloads the song, converts format if needed, writes metadata,
     /// and optionally saves lyric sidecar.
@@ -41,7 +53,7 @@ impl InternalDownloadTask {
         on_progress: F,
     ) -> TaskExecutionResult
     where
-        F: Fn(DownloadTaskProgressEvent) + Send + Clone + 'static,
+        F: Fn(DownloadTaskProgressEvent) + Send + Sync + Clone + 'static,
     {
         if is_cancelled(cancellation_flag.as_ref()) {
             return TaskExecutionResult::Cancelled;
@@ -145,6 +157,171 @@ impl InternalDownloadTask {
             },
             Err(e) => {
                 // Check if this was a cancellation
+                let msg = e.to_string();
+                if msg.contains("cancelled") || msg.contains("Canceled") {
+                    TaskExecutionResult::Cancelled
+                } else {
+                    TaskExecutionResult::Failed(classify_error(e))
+                }
+            }
+        }
+    }
+
+    /// Execute only the download (network) phase of this task.
+    ///
+    /// Returns a [`WritePayload`] on success that can later be passed to
+    /// [`execute_write_phase`](Self::execute_write_phase) on a write worker.
+    /// This enables pipelined execution where song N+1's download overlaps
+    /// with song N's disk write.
+    pub async fn execute_download_phase<F>(
+        &self,
+        api: &ApiClient,
+        output_dir: &Path,
+        cancellation_flag: Option<Arc<AtomicBool>>,
+        on_progress: F,
+    ) -> Result<WritePayload, TaskExecutionResult>
+    where
+        F: Fn(DownloadTaskProgressEvent) + Send + Sync + Clone + 'static,
+    {
+        if is_cancelled(cancellation_flag.as_ref()) {
+            return Err(TaskExecutionResult::Cancelled);
+        }
+
+        let song = match api.get_song_detail(&self.song_cid).await {
+            Ok(s) => s,
+            Err(e) => {
+                return Err(TaskExecutionResult::Failed(make_error(
+                    DownloadErrorCode::Api,
+                    "Failed to fetch song detail",
+                    e,
+                    true,
+                )));
+            }
+        };
+
+        let album = match api.get_album_detail(&self.album_cid).await {
+            Ok(a) => a,
+            Err(e) => {
+                return Err(TaskExecutionResult::Failed(make_error(
+                    DownloadErrorCode::Api,
+                    "Failed to fetch album detail",
+                    e,
+                    true,
+                )));
+            }
+        };
+
+        if is_cancelled(cancellation_flag.as_ref()) {
+            return Err(TaskExecutionResult::Cancelled);
+        }
+
+        let task_id = self.id.clone();
+        let job_id = self.job_id.clone();
+        let song_index = self.song_index;
+        let song_count = self.song_count;
+
+        let start_time = Instant::now();
+        let last_bytes = Arc::new(AtomicU64::new(0));
+        let last_time = Arc::new(Mutex::new(start_time));
+
+        let result = download_song_phase1(
+            api,
+            &song,
+            &album,
+            output_dir,
+            self.format,
+            self.download_lyrics,
+            &MetaOverride {
+                album_name: String::new(),
+                artists: Vec::new(),
+                album_artists: Vec::new(),
+            },
+            cancellation_flag,
+            {
+                let on_progress = on_progress.clone();
+                let last_bytes = Arc::clone(&last_bytes);
+                let last_time = Arc::clone(&last_time);
+                move |prog| {
+                    let now = Instant::now();
+                    let prev_time = {
+                        let mut time_guard = last_time.lock().unwrap();
+                        let prev = *time_guard;
+                        *time_guard = now;
+                        prev
+                    };
+                    let elapsed = now.duration_since(prev_time).as_secs_f64();
+
+                    let prev_bytes = last_bytes.swap(prog.bytes_done, Ordering::Relaxed);
+                    let speed_bytes_per_sec = if elapsed > 0.0 {
+                        let bytes_delta = prog.bytes_done.saturating_sub(prev_bytes);
+                        bytes_delta as f64 / elapsed
+                    } else {
+                        0.0
+                    };
+
+                    on_progress(DownloadTaskProgressEvent {
+                        job_id: job_id.clone(),
+                        task_id: task_id.clone(),
+                        status: prog.status,
+                        bytes_done: prog.bytes_done,
+                        bytes_total: prog.bytes_total,
+                        song_index,
+                        song_count,
+                        speed_bytes_per_sec,
+                    });
+                }
+            },
+        )
+        .await;
+
+        match result {
+            Ok(payload) => Ok(payload),
+            Err(e) => {
+                let msg = e.to_string();
+                if msg.contains("cancelled") || msg.contains("Canceled") {
+                    Err(TaskExecutionResult::Cancelled)
+                } else {
+                    Err(TaskExecutionResult::Failed(classify_error(e)))
+                }
+            }
+        }
+    }
+
+    /// Execute only the write (disk I/O) phase using a previously obtained
+    /// [`WritePayload`].
+    ///
+    /// This is the counterpart to [`execute_download_phase`](Self::execute_download_phase).
+    pub fn execute_write_phase<F>(
+        &self,
+        payload: &WritePayload,
+        on_progress: F,
+    ) -> TaskExecutionResult
+    where
+        F: Fn(DownloadTaskProgressEvent) + Send + Sync + Clone + 'static,
+    {
+        let task_id = self.id.clone();
+        let job_id = self.job_id.clone();
+        let song_index = self.song_index;
+        let song_count = self.song_count;
+
+        let progress_adapter = |prog: crate::downloader::DownloadProgress| {
+            on_progress(DownloadTaskProgressEvent {
+                job_id: job_id.clone(),
+                task_id: task_id.clone(),
+                status: prog.status,
+                bytes_done: prog.bytes_done,
+                bytes_total: prog.bytes_total,
+                song_index,
+                song_count,
+                speed_bytes_per_sec: 0.0,
+            });
+        };
+
+        match write_payload_to_disk(payload, Some(&progress_adapter)) {
+            Ok(path) => TaskExecutionResult::Completed {
+                output_path: path.to_string_lossy().to_string(),
+            },
+            Err(e) => {
                 let msg = e.to_string();
                 if msg.contains("cancelled") || msg.contains("Canceled") {
                     TaskExecutionResult::Cancelled

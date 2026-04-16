@@ -9,6 +9,65 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+/// Owned version of [`FlacMetadata`] for sending across async boundaries.
+///
+/// Unlike the borrowed `FlacMetadata<'a>`, this struct owns all its data so it
+/// can be safely sent through channels (`Send + 'static`).
+#[derive(Debug, Clone)]
+pub struct OwnedFlacMetadata {
+    pub title: String,
+    pub artists: Vec<String>,
+    pub album: String,
+    pub album_artists: Vec<String>,
+    pub track_number: Option<u32>,
+    pub total_tracks: Option<u32>,
+    pub disc_number: Option<u32>,
+    pub total_discs: Option<u32>,
+    /// JPEG-encoded cover art bytes, if available.
+    pub cover_jpeg: Option<Vec<u8>>,
+}
+
+impl OwnedFlacMetadata {
+    /// Create a borrowed [`FlacMetadata`] referencing this struct's data.
+    pub fn as_borrowed(&self) -> FlacMetadata<'_> {
+        FlacMetadata {
+            title: &self.title,
+            artists: &self.artists,
+            album: &self.album,
+            album_artists: &self.album_artists,
+            track_number: self.track_number,
+            total_tracks: self.total_tracks,
+            disc_number: self.disc_number,
+            total_discs: self.total_discs,
+            cover: self
+                .cover_jpeg
+                .as_deref()
+                .map(|bytes| ("image/jpeg" as &'static str, bytes)),
+        }
+    }
+}
+
+/// Payload produced by the download phase, carrying all data needed to write
+/// the song to disk. This is the message type sent from the download stage
+/// to the write worker in a pipeline configuration.
+#[derive(Debug)]
+pub struct WritePayload {
+    /// Complete audio data buffered in memory.
+    pub audio_bytes: Vec<u8>,
+    /// Directory where the audio file should be written.
+    pub output_dir: PathBuf,
+    /// Base name for the output file (before sanitization/extension).
+    pub base_name: String,
+    /// Target output format.
+    pub format: OutputFormat,
+    /// FLAC metadata to write (only used when output is FLAC).
+    pub flac_metadata: Option<OwnedFlacMetadata>,
+    /// Lyric text content, if lyrics were downloaded.
+    pub lyric_text: Option<String>,
+    /// Cancellation flag shared with the download phase.
+    pub cancellation_flag: Option<Arc<AtomicBool>>,
+}
+
 /// 下载 FLAC 时可选的标签元数据覆盖项。
 /// 空字符串或空数组表示“沿用接口返回值”。
 pub struct MetaOverride {
@@ -63,7 +122,7 @@ async fn fetch_lyric_text(client: &ApiClient, song: &SongDetail) -> Result<Optio
     };
 
     let lyric_text = client
-        .download_text(&lyric_url)
+        .download_text(lyric_url)
         .await
         .with_context(|| format!("Failed to download lyric text for {}", song.name))?;
     if lyric_text.trim().is_empty() {
@@ -85,7 +144,7 @@ fn ensure_not_cancelled(cancellation_flag: Option<&Arc<AtomicBool>>) -> Result<(
 }
 
 fn emit_progress(
-    on_progress: &impl Fn(DownloadProgress),
+    on_progress: &(impl Fn(DownloadProgress) + ?Sized),
     song_name: &str,
     stage: DownloadStage,
     bytes_done: u64,
@@ -171,6 +230,10 @@ pub async fn download_album_cover(
 /// 因此 `song_index = 0`、`song_count = 1`。
 ///
 /// 返回最终写入的文件路径。
+///
+/// This is a convenience wrapper that runs [`download_song_phase1`] followed
+/// by [`write_payload_to_disk`] sequentially. For pipelined execution, call
+/// those two functions separately.
 pub async fn download_song(
     client: &ApiClient,
     song: &SongDetail,
@@ -180,11 +243,48 @@ pub async fn download_song(
     download_lyrics: bool,
     meta: &MetaOverride,
     cancellation_flag: Option<Arc<AtomicBool>>,
-    on_progress: impl Fn(DownloadProgress) + Send + 'static,
+    on_progress: impl Fn(DownloadProgress) + Send + Sync + 'static,
 ) -> Result<PathBuf> {
+    let progress_fn = Arc::new(on_progress);
+    let pfn_phase1 = Arc::clone(&progress_fn);
+
+    let payload = download_song_phase1(
+        client,
+        song,
+        album,
+        out_dir,
+        format,
+        download_lyrics,
+        meta,
+        cancellation_flag,
+        move |p| pfn_phase1(p),
+    )
+    .await?;
+
+    write_payload_to_disk(&payload, Some(progress_fn.as_ref()))
+}
+
+/// Phase 1 of a pipelined download: fetches cover, lyrics and audio data over
+/// the network, then returns a [`WritePayload`] that carries everything needed
+/// to write the song to disk.
+///
+/// This function performs all I/O that hits the network but does **not** touch
+/// the filesystem. The returned payload can be sent to a write worker that
+/// executes [`write_payload_to_disk`] on a separate task.
+pub async fn download_song_phase1(
+    client: &ApiClient,
+    song: &SongDetail,
+    album: &AlbumDetail,
+    out_dir: &Path,
+    format: OutputFormat,
+    download_lyrics: bool,
+    meta: &MetaOverride,
+    cancellation_flag: Option<Arc<AtomicBool>>,
+    on_progress: impl Fn(DownloadProgress) + Send + 'static,
+) -> Result<WritePayload> {
     ensure_not_cancelled(cancellation_flag.as_ref())?;
 
-    // 尝试拉取封面图，失败不影响主流程
+    // Fetch cover image (failure is non-fatal)
     let cover_bytes: Option<Vec<u8>> = client
         .download_bytes(&album.cover_url, |_, _| {})
         .await
@@ -192,7 +292,10 @@ pub async fn download_song(
     let embedded_cover = cover_bytes
         .as_deref()
         .and_then(|bytes| encode_cover_as_jpeg(bytes).ok());
+
     ensure_not_cancelled(cancellation_flag.as_ref())?;
+
+    // Fetch lyrics
     let lyric_text = if download_lyrics {
         fetch_lyric_text(client, song).await?
     } else {
@@ -204,6 +307,7 @@ pub async fn download_song(
     let pfn = Arc::clone(&progress_fn);
     let cancellation_flag_for_download = cancellation_flag.clone();
 
+    // Stream audio into memory
     let mut audio_bytes = Vec::new();
     client
         .download_stream(&song.source_url, |chunk, done, total| {
@@ -231,77 +335,138 @@ pub async fn download_song(
         .await?;
 
     ensure_not_cancelled(cancellation_flag.as_ref())?;
-    emit_progress(
-        progress_fn.as_ref(),
-        &song.name,
-        DownloadStage::Writing,
-        audio_bytes.len() as u64,
-        Some(audio_bytes.len() as u64),
-        0,
-        1,
-    );
 
-    let out_path = save_audio(&audio_bytes, out_dir, &song.name, format)
-        .with_context(|| format!("Failed to save audio file for {}", song.name))?;
+    // Build FLAC metadata if applicable
+    let flac_metadata = build_owned_flac_metadata(song, album, meta, embedded_cover.as_deref());
 
-    // 为 FLAC 文件写入标签，并在有覆盖项时优先使用覆盖值
-    if AudioFormat::detect(&audio_bytes) == AudioFormat::Flac
-        || (AudioFormat::detect(&audio_bytes) == AudioFormat::Wav && format == OutputFormat::Flac)
-    {
-        if out_path.extension().and_then(|e| e.to_str()) == Some("flac") {
-            let eff_album = if meta.album_name.is_empty() {
-                &album.name
-            } else {
-                &meta.album_name
-            };
-            let eff_artists = if meta.artists.is_empty() {
-                &song.artists
-            } else {
-                &meta.artists
-            };
-            let eff_album_artists = if meta.album_artists.is_empty() {
-                album
-                    .artists
-                    .as_deref()
-                    .filter(|artists| !artists.is_empty())
-                    .unwrap_or(eff_artists)
-            } else {
-                &meta.album_artists
-            };
-            let track_number = album
-                .songs
-                .iter()
-                .position(|entry| entry.cid == song.cid)
-                .map(|index| (index + 1) as u32);
-            let total_tracks = (!album.songs.is_empty()).then_some(album.songs.len() as u32);
-            let cover = embedded_cover.as_deref().map(|bytes| ("image/jpeg", bytes));
+    Ok(WritePayload {
+        audio_bytes,
+        output_dir: out_dir.to_path_buf(),
+        base_name: song.name.clone(),
+        format,
+        flac_metadata,
+        lyric_text,
+        cancellation_flag,
+    })
+}
 
-            ensure_not_cancelled(cancellation_flag.as_ref())?;
-            tag_flac(
-                &out_path,
-                &FlacMetadata {
-                    title: &song.name,
-                    artists: eff_artists,
-                    album: eff_album,
-                    album_artists: eff_album_artists,
-                    track_number,
-                    total_tracks,
-                    disc_number: Some(1),
-                    total_discs: Some(1),
-                    cover,
-                },
-            )
-            .with_context(|| format!("Failed to write FLAC metadata for {}", song.name))?;
+/// Phase 2 of a pipelined download: writes the audio file to disk, tags FLAC
+/// metadata, and writes the lyric sidecar.
+///
+/// This function only performs local filesystem I/O and can safely run on a
+/// blocking task or a dedicated write worker.
+///
+/// `on_progress` is called once with `DownloadStage::Writing` before I/O starts.
+pub fn write_payload_to_disk(
+    payload: &WritePayload,
+    on_progress: Option<&dyn Fn(DownloadProgress)>,
+) -> Result<PathBuf> {
+    ensure_not_cancelled(
+        payload
+            .cancellation_flag
+            .as_ref()
+            .map(|f| f as &Arc<AtomicBool>),
+    )?;
+
+    if let Some(progress_fn) = on_progress {
+        emit_progress(
+            progress_fn,
+            &payload.base_name,
+            DownloadStage::Writing,
+            payload.audio_bytes.len() as u64,
+            Some(payload.audio_bytes.len() as u64),
+            0,
+            1,
+        );
+    }
+
+    let out_path = save_audio(
+        &payload.audio_bytes,
+        &payload.output_dir,
+        &payload.base_name,
+        payload.format,
+    )
+    .with_context(|| format!("Failed to save audio file for {}", payload.base_name))?;
+
+    // Tag FLAC if applicable
+    if let Some(ref flac_meta) = payload.flac_metadata {
+        let detected = AudioFormat::detect(&payload.audio_bytes);
+        let is_flac_output = detected == AudioFormat::Flac
+            || (detected == AudioFormat::Wav && payload.format == OutputFormat::Flac);
+
+        if is_flac_output && out_path.extension().and_then(|e| e.to_str()) == Some("flac") {
+            ensure_not_cancelled(
+                payload
+                    .cancellation_flag
+                    .as_ref()
+                    .map(|f| f as &Arc<AtomicBool>),
+            )?;
+            tag_flac(&out_path, &flac_meta.as_borrowed()).with_context(|| {
+                format!("Failed to write FLAC metadata for {}", payload.base_name)
+            })?;
         }
     }
 
-    if let Some(lyric_text) = lyric_text.as_deref() {
-        ensure_not_cancelled(cancellation_flag.as_ref())?;
+    // Write lyric sidecar
+    if let Some(ref lyric_text) = payload.lyric_text {
+        ensure_not_cancelled(
+            payload
+                .cancellation_flag
+                .as_ref()
+                .map(|f| f as &Arc<AtomicBool>),
+        )?;
         write_lyric_sidecar(&out_path, lyric_text)
-            .with_context(|| format!("Failed to save lyric sidecar for {}", song.name))?;
+            .with_context(|| format!("Failed to save lyric sidecar for {}", payload.base_name))?;
     }
 
     Ok(out_path)
+}
+
+/// Build owned FLAC metadata from song/album info and optional cover bytes.
+fn build_owned_flac_metadata(
+    song: &SongDetail,
+    album: &AlbumDetail,
+    meta: &MetaOverride,
+    embedded_cover: Option<&[u8]>,
+) -> Option<OwnedFlacMetadata> {
+    let eff_album = if meta.album_name.is_empty() {
+        album.name.clone()
+    } else {
+        meta.album_name.clone()
+    };
+    let eff_artists = if meta.artists.is_empty() {
+        song.artists.clone()
+    } else {
+        meta.artists.clone()
+    };
+    let eff_album_artists = if meta.album_artists.is_empty() {
+        album
+            .artists
+            .as_deref()
+            .filter(|artists| !artists.is_empty())
+            .unwrap_or(&eff_artists)
+            .to_vec()
+    } else {
+        meta.album_artists.clone()
+    };
+    let track_number = album
+        .songs
+        .iter()
+        .position(|entry| entry.cid == song.cid)
+        .map(|index| (index + 1) as u32);
+    let total_tracks = (!album.songs.is_empty()).then_some(album.songs.len() as u32);
+
+    Some(OwnedFlacMetadata {
+        title: song.name.clone(),
+        artists: eff_artists,
+        album: eff_album,
+        album_artists: eff_album_artists,
+        track_number,
+        total_tracks,
+        disc_number: Some(1),
+        total_discs: Some(1),
+        cover_jpeg: embedded_cover.map(|b| b.to_vec()),
+    })
 }
 
 /// 下载整张专辑到 `out_dir/<album_name>/` 目录下。
