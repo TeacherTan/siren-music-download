@@ -14,12 +14,15 @@ anyhow = "1"
 dirs = "5"
 cpal = "0.17"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+md5 = "0.7"
 serde = { version = "1", features = ["derive"] }
 siren_core = { path = "../crates/siren-core" }
 souvlaki = "0.8"
 symphonia = { version = "0.5.5", features = ["flac", "mp3", "wav"] }
 tauri = { version = "2", features = ["custom-protocol"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+notify-rust = "4.15"
 tokio = { version = "1", features = ["full"] }
 
 [build-dependencies]

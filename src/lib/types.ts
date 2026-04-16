@@ -174,3 +174,14 @@ export interface PlayerState {
   duration: number;
   volume: number;
 }
+
+export interface NotificationPreferences {
+  notifyOnDownloadComplete: boolean;
+  notifyOnPlaybackChange: boolean;
+}
+
+export type NotificationPermissionState =
+  | 'granted'
+  | 'denied'
+  | 'prompt'
+  | 'prompt-with-rationale';

@@ -1,0 +1,56 @@
+//! Cross-platform notification implementation for Windows/Linux using Tauri plugin.
+
+use std::path::PathBuf;
+use tauri::{AppHandle, Manager};
+use tauri_plugin_notification::NotificationExt;
+
+pub fn show_playback(
+    app: &AppHandle,
+    title: String,
+    body: String,
+    cover_path: Option<PathBuf>,
+) -> Result<(), String> {
+    let mut builder = app.notification().builder().title(title).body(body);
+
+    if let Some(path) = cover_path.and_then(|path| path.to_str().map(ToOwned::to_owned)) {
+        builder = builder.icon(path);
+    }
+
+    builder.show().map_err(|error| {
+        let message = error.to_string();
+        eprintln!("[notification:desktop] show playback failed: {message}");
+        message
+    })?;
+
+    Ok(())
+}
+
+pub fn show_download(app: &AppHandle, title: String, body: String) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(|error| {
+            let message = error.to_string();
+            eprintln!("[notification:desktop] show download failed: {message}");
+            message
+        })?;
+
+    Ok(())
+}
+
+pub fn show_test(app: &AppHandle) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title("测试通知")
+        .body("塞壬音乐下载器通知功能正常。")
+        .show()
+        .map_err(|error| {
+            let message = error.to_string();
+            eprintln!("[notification:desktop] show test failed: {message}");
+            message
+        })?;
+
+    Ok(())
+}

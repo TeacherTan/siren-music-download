@@ -36,6 +36,7 @@ mod app_state;
 mod audio_cache;
 mod commands;
 mod downloads;
+mod notification;
 mod player;
 mod theme;
 
@@ -90,7 +91,10 @@ fn fit_main_window_to_monitor<R: tauri::Runtime>(window: &WebviewWindow<R>) -> t
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            let _ = tauri_plugin_notification::NotificationExt::notification(app)
+                .request_permission();
             let window = app
                 .get_webview_window("main")
                 .context("Failed to locate main window")?;
@@ -132,6 +136,10 @@ fn main() {
             commands::playback::play_previous,
             commands::playback::get_player_state,
             commands::playback::set_playback_volume,
+            commands::preferences::get_notification_preferences,
+            commands::preferences::set_notification_preferences,
+            commands::preferences::get_notification_permission_state,
+            commands::preferences::send_test_notification,
             commands::downloads::download_song,
             commands::downloads::clear_audio_cache,
             commands::downloads::create_download_job,

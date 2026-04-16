@@ -4,6 +4,7 @@ import { getCached, setCached } from './cache';
 import type {
   Album, AlbumDetail, SongDetail, ThemePalette, PlayerState, PlaybackContext,
   CreateDownloadJobRequest, DownloadJobSnapshot, DownloadManagerSnapshot,
+  NotificationPermissionState, NotificationPreferences,
 } from './types';
 import type { OutputFormat } from './types';
 
@@ -250,4 +251,34 @@ export async function retryDownloadTask(jobId: string, taskId: string): Promise<
  */
 export async function clearDownloadHistory(): Promise<number> {
   return invoke('clear_download_history');
+}
+
+/**
+ * Get notification preferences from the Tauri backend.
+ */
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  return invoke('get_notification_preferences');
+}
+
+/**
+ * Update notification preferences in the Tauri backend.
+ */
+export async function setNotificationPreferences(
+  preferences: NotificationPreferences,
+): Promise<NotificationPreferences> {
+  return invoke('set_notification_preferences', { preferences });
+}
+
+/**
+ * Get notification permission state from the Tauri backend.
+ */
+export async function getNotificationPermissionState(): Promise<NotificationPermissionState> {
+  return invoke('get_notification_permission_state');
+}
+
+/**
+ * Send a test notification through the Tauri backend.
+ */
+export async function sendTestNotification(): Promise<void> {
+  return invoke('send_test_notification');
 }

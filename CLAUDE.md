@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 - 技术栈：Rust + Tauri 2 + Vite + Svelte 5
 - 形态：跨平台桌面应用（macOS / Windows / Linux）
-- 当前重点：M1–M3 下载任务系统已完成，下一步是 M4 系统通知集成
+- 当前重点：M1–M4 已完成，当前已具备系统通知集成能力
 
 ## 常用命令
 
@@ -34,11 +34,13 @@ Cargo workspace
 │       ├── main.rs          # Tauri command 入口
 │       ├── app_state.rs     # 应用状态组合
 │       ├── audio_cache.rs   # 流式播放缓存
+│       ├── notification/    # 系统通知（公共入口、封面缓存、平台实现）
 │       ├── theme.rs         # 封面取色
 │       ├── commands/        # Tauri command 包装层
 │       │   ├── mod.rs
 │       │   ├── library.rs
 │       │   ├── playback.rs
+│       │   ├── preferences.rs
 │       │   └── downloads.rs
 │       ├── downloads/       # 下载桥接层与事件
 │       │   ├── mod.rs
@@ -98,6 +100,10 @@ Cargo workspace
 - `retry_download_job`
 - `retry_download_task`
 - `clear_download_history`
+- `get_notification_preferences`
+- `set_notification_preferences`
+- `get_notification_permission_state`
+- `send_test_notification`
 
 播放器事件：
 
@@ -138,10 +144,11 @@ Cargo workspace
 - **M1** 下载任务领域模型、DownloadService、单曲任务化、新 commands / events
 - **M2** 整专下载、专辑封面落盘、下载进度事件推送、前端总进度展示、专辑页批量下载入口、重复创建保护
 - **M3** 任务取消、重试、历史清理、结构化错误码与详情、独立下载面板 UI
+- **M4** 系统通知集成（下载完成通知、播放切换通知、通知偏好开关）
 
 ### 未完成
 
-- **M4** 系统通知集成
+- 暂无正在进行的里程碑功能
 
 ## 代码层约定
 

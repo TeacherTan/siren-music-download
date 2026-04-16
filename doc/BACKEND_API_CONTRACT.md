@@ -19,6 +19,8 @@
 - `DownloadManagerSnapshot`
 - `CreateDownloadJobRequest`
 - `DownloadTaskProgressEvent`
+- `NotificationPreferences`
+- `NotificationPermissionState`
 
 ## 类型字段定义
 
@@ -138,7 +140,23 @@
 - `songIndex: number`
 - `songCount: number`
 
+### `NotificationPreferences`
+
+- `notifyOnDownloadComplete: boolean`
+- `notifyOnPlaybackChange: boolean`
+
+### `NotificationPermissionState`
+
+冻结枚举：
+
+- `granted`
+- `denied`
+- `prompt`
+- `prompt-with-rationale`
+
 ## Commands
+
+### 下载任务命令
 
 冻结命令如下：
 
@@ -155,6 +173,21 @@
 
 - 不再单独冻结 `enqueue_album_download`，统一通过 `create_download_job` + `kind` / `albumCid` 表达，避免双入口重复。
 - 旧 `download_song(songCid, outputDir, format, downloadLyrics) -> string` 视为兼容接口，新的实现开始后立即进入废弃状态。
+
+### 通知偏好命令
+
+冻结命令如下：
+
+1. `get_notification_preferences() -> NotificationPreferences`
+2. `set_notification_preferences(preferences: NotificationPreferences) -> NotificationPreferences`
+3. `get_notification_permission_state() -> NotificationPermissionState`
+4. `send_test_notification() -> void`
+
+说明：
+
+- 通知偏好存储在应用状态中，不持久化到磁盘
+- 通知权限状态由 Tauri 通知插件返回，反映系统级权限授予情况
+- 测试通知用于验证通知管道是否正常工作
 
 ## Events
 

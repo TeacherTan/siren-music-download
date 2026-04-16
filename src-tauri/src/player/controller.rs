@@ -122,6 +122,10 @@ impl AudioPlayer {
         })
     }
 
+    pub fn app_handle(&self) -> AppHandle {
+        self.app.clone()
+    }
+
     pub fn bind_media_controls<F>(&self, handler: F) -> Result<()>
     where
         F: Fn(MediaControlEvent) + Send + 'static,
@@ -469,8 +473,10 @@ fn emit_state_and_sync(
     state: &Arc<Mutex<PlayerState>>,
     media_session: &Arc<Mutex<Option<MediaSession>>>,
 ) {
+    let snapshot = state.lock().unwrap().clone();
     emit_state(app, state);
     sync_media_session(media_session, state, false);
+    crate::notification::notify_playback_changed(app, &snapshot);
 }
 
 fn emit_progress_and_sync(

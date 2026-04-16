@@ -2,18 +2,36 @@ use crate::audio_cache;
 use crate::player::stream::{GrowingFileHandle, PlaybackInput, SampleBuffer};
 use crate::player::{AudioPlayer, PlaybackContext, PlaybackQueueEntry};
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use siren_core::DownloadService;
 use siren_core::OutputFormat;
 use souvlaki::{MediaControlEvent, SeekDirection};
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Mutex;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NotificationPreferences {
+    pub(crate) notify_on_download_complete: bool,
+    pub(crate) notify_on_playback_change: bool,
+}
+
+impl Default for NotificationPreferences {
+    fn default() -> Self {
+        Self {
+            notify_on_download_complete: true,
+            notify_on_playback_change: true,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) player: Arc<AudioPlayer>,
     pub(crate) api: Arc<siren_core::ApiClient>,
     pub(crate) download_service: Arc<Mutex<DownloadService>>,
+    pub(crate) notification_preferences: Arc<StdMutex<NotificationPreferences>>,
 }
 
 impl AppState {
@@ -21,11 +39,21 @@ impl AppState {
         let player = AudioPlayer::new(app).map_err(|e| e.to_string())?;
         let api = siren_core::ApiClient::new().map_err(|e| e.to_string())?;
         let download_service = Arc::new(Mutex::new(DownloadService::new()));
+        let notification_preferences = Arc::new(StdMutex::new(NotificationPreferences::default()));
         Ok(Self {
             player: Arc::new(player),
             api: Arc::new(api),
             download_service,
+            notification_preferences,
         })
+    }
+
+    pub(crate) fn notification_preferences(&self) -> NotificationPreferences {
+        self.notification_preferences.lock().unwrap().clone()
+    }
+
+    pub(crate) fn set_notification_preferences(&self, preferences: NotificationPreferences) {
+        *self.notification_preferences.lock().unwrap() = preferences;
     }
 
     pub(crate) async fn play_song_internal(

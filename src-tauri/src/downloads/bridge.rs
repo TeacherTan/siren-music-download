@@ -194,6 +194,9 @@ async fn execution_loop(
             emit_download_job_updated(app, &s);
             let manager_snapshot = service.lock().await.manager_snapshot();
             emit_download_manager_state_changed(app, &manager_snapshot);
+
+            // Trigger system notification for completed downloads
+            crate::notification::notify_download_completed(app, &s);
         }
     }
 }

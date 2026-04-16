@@ -1,19 +1,39 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
-  import { listen } from '@tauri-apps/api/event';
-  import { AnimatePresence, motion } from '@humanspeak/svelte-motion';
-  import { OverlayScrollbarsComponent } from 'overlayscrollbars-svelte';
-  import type { OverlayScrollbarsComponentRef } from 'overlayscrollbars-svelte';
-  import type { EventListeners, OverlayScrollbars, PartialOptions } from 'overlayscrollbars';
+  import { onMount, tick } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
+  import { AnimatePresence, motion } from "@humanspeak/svelte-motion";
+  import { OverlayScrollbarsComponent } from "overlayscrollbars-svelte";
+  import type { OverlayScrollbarsComponentRef } from "overlayscrollbars-svelte";
+  import type {
+    EventListeners,
+    OverlayScrollbars,
+    PartialOptions,
+  } from "overlayscrollbars";
   import {
-    getAlbums, getAlbumDetail, getDefaultOutputDir, selectDirectory,
-    playSong, pausePlayback, resumePlayback,
-    seekCurrentPlayback, getPlayerState, clearAudioCache, extractImageTheme,
+    getAlbums,
+    getAlbumDetail,
+    getDefaultOutputDir,
+    selectDirectory,
+    playSong,
+    pausePlayback,
+    resumePlayback,
+    seekCurrentPlayback,
+    getPlayerState,
+    clearAudioCache,
+    extractImageTheme,
     getSongLyrics,
-    createDownloadJob, listDownloadJobs, cancelDownloadJob, cancelDownloadTask,
-    retryDownloadJob, retryDownloadTask, clearDownloadHistory,
-  } from '$lib/api';
-  import { clearCache } from '$lib/cache';
+    createDownloadJob,
+    listDownloadJobs,
+    cancelDownloadJob,
+    cancelDownloadTask,
+    retryDownloadJob,
+    retryDownloadTask,
+    clearDownloadHistory,
+    getNotificationPreferences,
+    setNotificationPreferences,
+    sendTestNotification,
+  } from "$lib/api";
+  import { clearCache } from "$lib/cache";
   import type {
     Album,
     AlbumDetail,
@@ -27,14 +47,15 @@
     DownloadTaskProgressEvent,
     CreateDownloadJobRequest,
     DownloadTaskSnapshot,
-  } from '$lib/types';
-  import { applyThemePalette, DEFAULT_THEME_PALETTE } from '$lib/theme';
-  import { motionStyles } from '$lib/actions/motionStyles';
-  import AlbumCard from '$lib/components/AlbumCard.svelte';
-  import SongRow from '$lib/components/SongRow.svelte';
-  import AudioPlayer from '$lib/components/AudioPlayer.svelte';
-  import MotionSpinner from '$lib/components/MotionSpinner.svelte';
-  import MotionPulseBlock from '$lib/components/MotionPulseBlock.svelte';
+    NotificationPreferences,
+  } from "$lib/types";
+  import { applyThemePalette, DEFAULT_THEME_PALETTE } from "$lib/theme";
+  import { motionStyles } from "$lib/actions/motionStyles";
+  import AlbumCard from "$lib/components/AlbumCard.svelte";
+  import SongRow from "$lib/components/SongRow.svelte";
+  import AudioPlayer from "$lib/components/AudioPlayer.svelte";
+  import MotionSpinner from "$lib/components/MotionSpinner.svelte";
+  import MotionPulseBlock from "$lib/components/MotionPulseBlock.svelte";
 
   // Minimum display time (ms) to prevent animation flash on fast loads
   const MIN_DISPLAY_MS = 260;
@@ -52,12 +73,15 @@
   const ALBUM_STAGE_BASE_VIEWPORT_RATIO = 1 / 3;
   const ALBUM_STAGE_COLLAPSE_SCROLL_RANGE = 260;
   const ALBUM_STAGE_SOLIDIFY_SCROLL_RANGE = 220;
-  const DOWNLOAD_LYRICS_PREF_KEY = 'siren:download-lyrics-sidecar';
+  const DOWNLOAD_LYRICS_PREF_KEY = "siren:download-lyrics-sidecar";
+  const NOTIFY_DOWNLOAD_PREF_KEY = "siren:notify-download";
+  const NOTIFY_PLAYBACK_PREF_KEY = "siren:notify-playback";
 
-  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  const delay = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
 
-  type RepeatMode = 'all' | 'one';
-  type SongDownloadState = 'idle' | 'creating' | 'queued' | 'running';
+  type RepeatMode = "all" | "one";
+  type SongDownloadState = "idle" | "creating" | "queued" | "running";
 
   interface PlayerSong {
     cid: string;
@@ -75,11 +99,11 @@
   let albums = $state<Album[]>([]);
   let selectedAlbum = $state<AlbumDetail | null>(null);
   let selectedAlbumCid = $state<string | null>(null);
-  let outputDir = $state('');
-  let format = $state<OutputFormat>('flac');
+  let outputDir = $state("");
+  let format = $state<OutputFormat>("flac");
   let loadingAlbums = $state(false);
   let loadingDetail = $state(false);
-  let errorMsg = $state('');
+  let errorMsg = $state("");
 
   // Audio player state (synced from Rust backend via Tauri events)
   let currentSong = $state<PlayerSong | null>(null);
@@ -91,14 +115,14 @@
   let progress = $state(0);
   let duration = $state(0);
   let shuffleEnabled = $state(false);
-  let repeatMode = $state<RepeatMode>('all');
+  let repeatMode = $state<RepeatMode>("all");
   let playbackEntries = $state<PlaybackQueueEntry[]>([]);
   let playbackOrder = $state<PlaybackQueueEntry[]>([]);
   let playbackIndex = $state(-1);
   let lyricsOpen = $state(false);
   let playlistOpen = $state(false);
   let lyricsLoading = $state(false);
-  let lyricsError = $state('');
+  let lyricsError = $state("");
   let lyricsLines = $state<LyricLine[]>([]);
   let lyricsSongCid = $state<string | null>(null);
   let downloadingSongCid = $state<string | null>(null);
@@ -115,8 +139,10 @@
   // Computed: number of active/queued/running jobs
   let activeDownloadCount = $derived(
     downloadManager
-      ? downloadManager.jobs.filter((j) => j.status === 'running' || j.status === 'queued').length
-      : 0
+      ? downloadManager.jobs.filter(
+          (j) => j.status === "running" || j.status === "queued",
+        ).length
+      : 0,
   );
   // Track which song is currently being loaded to prevent duplicate play calls
   let playingCid = $state<string | null>(null);
@@ -131,7 +157,9 @@
   let prefersReducedMotion = $state(false);
   let showDetailSkeleton = $state(false);
   let contentEl = $state<HTMLElement | null>(null);
-  let contentScrollbar = $state<OverlayScrollbarsComponentRef<'main'> | null>(null);
+  let contentScrollbar = $state<OverlayScrollbarsComponentRef<"main"> | null>(
+    null,
+  );
   let albumStageEl = $state<HTMLElement | null>(null);
   let isMacOS = $state(false);
   let detailSkeletonTimer: ReturnType<typeof setTimeout> | null = null;
@@ -165,8 +193,8 @@
 
   const selectedSongCount = $derived.by(() => selectedSongCids.length);
   const selectedSongsLabel = $derived.by(() => {
-    if (selectedSongCount === 0) return '未选择歌曲';
-    if (selectedSongCount === 1) return '已选择 1 首';
+    if (selectedSongCount === 0) return "未选择歌曲";
+    if (selectedSongCount === 1) return "已选择 1 首";
     return `已选择 ${selectedSongCount} 首`;
   });
 
@@ -177,37 +205,44 @@
     }
   }
 
-  const overlayScrollbarOptions = $derived.by((): PartialOptions => ({
-    scrollbars: {
-      theme: 'os-theme-app',
-      autoHide: prefersReducedMotion ? 'leave' : 'move',
-      autoHideDelay: prefersReducedMotion ? 160 : 720,
-      autoHideSuspend: true,
-      dragScroll: true,
-      clickScroll: false,
-    },
-  }));
+  const overlayScrollbarOptions = $derived.by(
+    (): PartialOptions => ({
+      scrollbars: {
+        theme: "os-theme-app",
+        autoHide: prefersReducedMotion ? "leave" : "move",
+        autoHideDelay: prefersReducedMotion ? 160 : 720,
+        autoHideSuspend: true,
+        dragScroll: true,
+        clickScroll: false,
+      },
+    }),
+  );
 
-  const contentScrollbarEvents = $derived.by((): EventListeners => ({
-    initialized(instance) {
-      setContentViewport(instance);
-      handleContentScroll();
-    },
-    updated(instance) {
-      setContentViewport(instance);
-    },
-    destroyed() {
-      contentEl = null;
-    },
-    scroll(instance) {
-      setContentViewport(instance);
-      handleContentScroll();
-    },
-  }));
+  const contentScrollbarEvents = $derived.by(
+    (): EventListeners => ({
+      initialized(instance) {
+        setContentViewport(instance);
+        handleContentScroll();
+      },
+      updated(instance) {
+        setContentViewport(instance);
+      },
+      destroyed() {
+        contentEl = null;
+      },
+      scroll(instance) {
+        setContentViewport(instance);
+        handleContentScroll();
+      },
+    }),
+  );
 
   function resetContentScroll() {
     resetAlbumStageMotion();
-    contentEl?.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+    contentEl?.scrollTo({
+      top: 0,
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+    });
   }
 
   interface ImageMeta {
@@ -227,7 +262,9 @@
     };
   }
 
-  function preloadImage(src: string | null | undefined): Promise<ImageMeta | null> {
+  function preloadImage(
+    src: string | null | undefined,
+  ): Promise<ImageMeta | null> {
     if (!src) return Promise.resolve(null);
 
     return new Promise((resolve) => {
@@ -240,7 +277,7 @@
         resolve(meta);
       };
 
-      image.decoding = 'async';
+      image.decoding = "async";
       image.onload = () => finish(getImageMeta(image));
       image.onerror = () => finish(null);
       image.src = src;
@@ -251,7 +288,9 @@
     });
   }
 
-  async function preloadAlbumArtwork(album: AlbumDetail): Promise<number | null> {
+  async function preloadAlbumArtwork(
+    album: AlbumDetail,
+  ): Promise<number | null> {
     const meta = await preloadImage(album.coverDeUrl ?? album.coverUrl ?? null);
     return meta?.aspectRatio ?? null;
   }
@@ -278,13 +317,15 @@
 
     return {
       cid: state.songCid,
-      name: state.songName ?? '',
+      name: state.songName ?? "",
       artists: state.artists,
       coverUrl: state.coverUrl ?? null,
     };
   }
 
-  function buildAlbumPlaybackEntries(album: AlbumDetail | null): PlaybackQueueEntry[] {
+  function buildAlbumPlaybackEntries(
+    album: AlbumDetail | null,
+  ): PlaybackQueueEntry[] {
     if (!album) return [];
 
     const coverUrl = album.coverUrl ?? album.coverDeUrl ?? null;
@@ -305,7 +346,10 @@
     };
   }
 
-  function shufflePlaybackEntries(entries: PlaybackQueueEntry[], currentCid: string | null): PlaybackQueueEntry[] {
+  function shufflePlaybackEntries(
+    entries: PlaybackQueueEntry[],
+    currentCid: string | null,
+  ): PlaybackQueueEntry[] {
     if (entries.length <= 1) return [...entries];
 
     const rest = [...entries];
@@ -326,7 +370,10 @@
     return pinnedEntry ? [pinnedEntry, ...rest] : rest;
   }
 
-  function applyPlaybackQueue(entries: PlaybackQueueEntry[], currentCid: string | null) {
+  function applyPlaybackQueue(
+    entries: PlaybackQueueEntry[],
+    currentCid: string | null,
+  ) {
     playbackEntries = [...entries];
 
     if (!entries.length) {
@@ -335,7 +382,9 @@
       return;
     }
 
-    playbackOrder = shuffleEnabled ? shufflePlaybackEntries(entries, currentCid) : [...entries];
+    playbackOrder = shuffleEnabled
+      ? shufflePlaybackEntries(entries, currentCid)
+      : [...entries];
     playbackIndex = currentCid
       ? playbackOrder.findIndex((entry) => entry.cid === currentCid)
       : 0;
@@ -345,7 +394,10 @@
     }
   }
 
-  function buildPlaybackContext(order: PlaybackQueueEntry[], currentIndex: number): PlaybackContext | undefined {
+  function buildPlaybackContext(
+    order: PlaybackQueueEntry[],
+    currentIndex: number,
+  ): PlaybackContext | undefined {
     if (!order.length || currentIndex < 0 || currentIndex >= order.length) {
       return undefined;
     }
@@ -367,13 +419,17 @@
       return;
     }
 
-    const currentOrderIndex = playbackOrder.findIndex((entry) => entry.cid === song.cid);
+    const currentOrderIndex = playbackOrder.findIndex(
+      (entry) => entry.cid === song.cid,
+    );
     if (currentOrderIndex >= 0) {
       playbackIndex = currentOrderIndex;
       return;
     }
 
-    const currentSourceIndex = playbackEntries.findIndex((entry) => entry.cid === song.cid);
+    const currentSourceIndex = playbackEntries.findIndex(
+      (entry) => entry.cid === song.cid,
+    );
     if (currentSourceIndex >= 0) {
       applyPlaybackQueue(playbackEntries, song.cid);
       return;
@@ -390,8 +446,12 @@
     const parsed: LyricLine[] = [];
 
     for (const rawLine of lines) {
-      const matches = [...rawLine.matchAll(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g)];
-      const text = rawLine.replace(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g, '').trim() || '♪';
+      const matches = [
+        ...rawLine.matchAll(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g),
+      ];
+      const text =
+        rawLine.replace(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g, "").trim() ||
+        "♪";
 
       if (!matches.length) {
         parsed.push({
@@ -405,8 +465,8 @@
       for (const match of matches) {
         const minutes = Number(match[1] ?? 0);
         const seconds = Number(match[2] ?? 0);
-        const fractionText = match[3] ?? '0';
-        const fraction = Number(`0.${fractionText.padEnd(3, '0')}`);
+        const fractionText = match[3] ?? "0";
+        const fraction = Number(`0.${fractionText.padEnd(3, "0")}`);
         parsed.push({
           id: `${minutes}:${seconds}:${fractionText}:${parsed.length}`,
           time: minutes * 60 + seconds + fraction,
@@ -427,7 +487,7 @@
     const requestSeq = ++lyricRequestSeq;
     lyricsSongCid = songCid;
     lyricsLoading = true;
-    lyricsError = '';
+    lyricsError = "";
     lyricsLines = [];
 
     try {
@@ -496,10 +556,14 @@
     playingCid = entry.cid;
 
     try {
-      await playSong(entry.cid, entry.coverUrl ?? undefined, buildPlaybackContext(order, index));
+      await playSong(
+        entry.cid,
+        entry.coverUrl ?? undefined,
+        buildPlaybackContext(order, index),
+      );
     } catch (error) {
       playingCid = null;
-      console.error('[ERROR] Failed to play song from queue:', error);
+      console.error("[ERROR] Failed to play song from queue:", error);
     }
   }
 
@@ -538,7 +602,7 @@
   }
 
   function buildSelectionKey(songCids: string[]): string {
-    return [...songCids].sort().join(',');
+    return [...songCids].sort().join(",");
   }
 
   function isSongSelected(songCid: string): boolean {
@@ -566,25 +630,35 @@
   }
 
   function hasCurrentDownloadOptions(job: DownloadJobSnapshot): boolean {
-    return job.options.outputDir === outputDir
-      && job.options.format === format
-      && job.options.downloadLyrics === downloadLyrics;
+    return (
+      job.options.outputDir === outputDir &&
+      job.options.format === format &&
+      job.options.downloadLyrics === downloadLyrics
+    );
   }
 
-  function findSelectionDownloadJob(songCids: string[]): DownloadJobSnapshot | null {
+  function findSelectionDownloadJob(
+    songCids: string[],
+  ): DownloadJobSnapshot | null {
     if (!downloadManager || songCids.length === 0) return null;
 
     const targetKey = buildSelectionKey(songCids);
-    return downloadManager.jobs.find((job) => {
-      if (job.kind !== 'selection') return false;
-      if (job.status !== 'queued' && job.status !== 'running') return false;
-      if (!hasCurrentDownloadOptions(job)) return false;
-      return buildSelectionKey(job.tasks.map((task) => task.songCid)) === targetKey;
-    }) ?? null;
+    return (
+      downloadManager.jobs.find((job) => {
+        if (job.kind !== "selection") return false;
+        if (job.status !== "queued" && job.status !== "running") return false;
+        if (!hasCurrentDownloadOptions(job)) return false;
+        return (
+          buildSelectionKey(job.tasks.map((task) => task.songCid)) === targetKey
+        );
+      }) ?? null
+    );
   }
 
   function getCurrentSelectionKey(): string | null {
-    return selectedSongCids.length > 0 ? buildSelectionKey(selectedSongCids) : null;
+    return selectedSongCids.length > 0
+      ? buildSelectionKey(selectedSongCids)
+      : null;
   }
 
   function isCurrentSelectionCreating(): boolean {
@@ -597,25 +671,33 @@
   }
 
   function isSelectionDownloadActionDisabled(): boolean {
-    return selectedSongCount === 0 || isCurrentSelectionCreating() || !!getCurrentSelectionJob();
+    return (
+      selectedSongCount === 0 ||
+      isCurrentSelectionCreating() ||
+      !!getCurrentSelectionJob()
+    );
   }
 
   function findAlbumDownloadJob(albumCid: string): DownloadJobSnapshot | null {
     if (!downloadManager) return null;
 
-    return downloadManager.jobs.find((job) => {
-      if (job.kind !== 'album') return false;
-      const matchesAlbum = job.tasks.some((task) => task.albumCid === albumCid);
-      if (!matchesAlbum) return false;
-      return job.status === 'queued' || job.status === 'running';
-    }) ?? null;
+    return (
+      downloadManager.jobs.find((job) => {
+        if (job.kind !== "album") return false;
+        const matchesAlbum = job.tasks.some(
+          (task) => task.albumCid === albumCid,
+        );
+        if (!matchesAlbum) return false;
+        return job.status === "queued" || job.status === "running";
+      }) ?? null
+    );
   }
 
   function findSongDownloadTask(songCid: string): DownloadTaskSnapshot | null {
     if (!downloadManager) return null;
 
     for (const job of downloadManager.jobs) {
-      if (job.status !== 'queued' && job.status !== 'running') continue;
+      if (job.status !== "queued" && job.status !== "running") continue;
       const task = job.tasks.find((candidate) => candidate.songCid === songCid);
       if (task) return task;
     }
@@ -629,32 +711,39 @@
 
   function getSongDownloadState(songCid: string): SongDownloadState {
     if (downloadingSongCid === songCid) {
-      return 'creating';
+      return "creating";
     }
 
     const task = findSongDownloadTask(songCid);
     if (!task) {
-      return 'idle';
+      return "idle";
     }
 
-    if (task.status === 'queued') {
-      return 'queued';
+    if (task.status === "queued") {
+      return "queued";
     }
 
-    if (task.status === 'preparing' || task.status === 'downloading' || task.status === 'writing') {
-      return 'running';
+    if (
+      task.status === "preparing" ||
+      task.status === "downloading" ||
+      task.status === "writing"
+    ) {
+      return "running";
     }
 
-    return 'idle';
+    return "idle";
   }
 
   function getSongDownloadJob(songCid: string): DownloadJobSnapshot | null {
     if (!downloadManager) return null;
 
-    return downloadManager.jobs.find((job) =>
-      (job.status === 'queued' || job.status === 'running')
-      && job.tasks.some((task) => task.songCid === songCid)
-    ) ?? null;
+    return (
+      downloadManager.jobs.find(
+        (job) =>
+          (job.status === "queued" || job.status === "running") &&
+          job.tasks.some((task) => task.songCid === songCid),
+      ) ?? null
+    );
   }
 
   async function performSongDownload(songCid: string) {
@@ -669,7 +758,7 @@
     downloadingSongCid = songCid;
     try {
       const request: CreateDownloadJobRequest = {
-        kind: 'song',
+        kind: "song",
         songCids: [songCid],
         albumCid: null,
         options: {
@@ -694,11 +783,13 @@
       const existingJob = getSongDownloadJob(currentSong.cid);
       await performSongDownload(currentSong.cid);
       if (existingJob) {
-        alert('这首歌的下载任务已在队列中或正在执行。');
+        alert("这首歌的下载任务已在队列中或正在执行。");
       }
     } catch (error) {
-      console.error('[ERROR] Failed to download current song:', error);
-      alert(`下载失败：${error instanceof Error ? error.message : String(error)}`);
+      console.error("[ERROR] Failed to download current song:", error);
+      alert(
+        `下载失败：${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -716,7 +807,7 @@
     downloadingAlbumCid = album.cid;
     try {
       const request: CreateDownloadJobRequest = {
-        kind: 'album',
+        kind: "album",
         songCids: [],
         albumCid: album.cid,
         options: {
@@ -752,7 +843,7 @@
     creatingSelectionKey = selectionKey;
     try {
       const request: CreateDownloadJobRequest = {
-        kind: 'selection',
+        kind: "selection",
         songCids,
         albumCid: null,
         options: {
@@ -780,11 +871,13 @@
       const existingJob = findAlbumDownloadJob(selectedAlbum.cid);
       await performAlbumDownload(selectedAlbum);
       if (existingJob) {
-        alert('这张专辑的下载任务已在队列中或正在执行。');
+        alert("这张专辑的下载任务已在队列中或正在执行。");
       }
     } catch (error) {
-      console.error('[ERROR] Failed to download album:', error);
-      alert(`整专下载失败：${error instanceof Error ? error.message : String(error)}`);
+      console.error("[ERROR] Failed to download album:", error);
+      alert(
+        `整专下载失败：${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -795,27 +888,38 @@
       const existingJob = findSelectionDownloadJob(selectedSongCids);
       await performSelectionDownload(selectedSongCids);
       if (existingJob) {
-        alert('这组歌曲的下载任务已在队列中或正在执行。');
+        alert("这组歌曲的下载任务已在队列中或正在执行。");
       }
     } catch (error) {
-      console.error('[ERROR] Failed to create selection download job:', error);
-      alert(`批量下载失败：${error instanceof Error ? error.message : String(error)}`);
+      console.error("[ERROR] Failed to create selection download job:", error);
+      alert(
+        `批量下载失败：${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   async function handlePlaybackEnded(songCid: string) {
     const requestSeq = ++playbackEndRequestSeq;
-    const currentIndex = playbackOrder.findIndex((entry) => entry.cid === songCid);
+    const currentIndex = playbackOrder.findIndex(
+      (entry) => entry.cid === songCid,
+    );
     if (currentIndex < 0) return;
 
-    if (repeatMode === 'one') {
-      await playQueueEntry(playbackOrder[currentIndex], playbackOrder, currentIndex, { forceRestart: true });
+    if (repeatMode === "one") {
+      await playQueueEntry(
+        playbackOrder[currentIndex],
+        playbackOrder,
+        currentIndex,
+        { forceRestart: true },
+      );
       return;
     }
 
     const nextIndex = (currentIndex + 1) % playbackOrder.length;
     if (requestSeq !== playbackEndRequestSeq) return;
-    await playQueueEntry(playbackOrder[nextIndex], playbackOrder, nextIndex, { forceRestart: true });
+    await playQueueEntry(playbackOrder[nextIndex], playbackOrder, nextIndex, {
+      forceRestart: true,
+    });
   }
 
   function flushAlbumStageMotion() {
@@ -837,10 +941,11 @@
     },
     immediate = false,
   ) {
-    pendingAlbumStageCollapseOffset = next.collapseOffset ?? pendingAlbumStageCollapseOffset;
+    pendingAlbumStageCollapseOffset =
+      next.collapseOffset ?? pendingAlbumStageCollapseOffset;
     pendingAlbumStageScrollTop = next.scrollTop ?? pendingAlbumStageScrollTop;
 
-    if (immediate || prefersReducedMotion || typeof window === 'undefined') {
+    if (immediate || prefersReducedMotion || typeof window === "undefined") {
       if (albumStageMotionFrame) {
         cancelAnimationFrame(albumStageMotionFrame);
         albumStageMotionFrame = 0;
@@ -891,22 +996,25 @@
       return 0;
     }
 
-    return Math.min(albumStageFullHeight, viewportHeight * ALBUM_STAGE_BASE_VIEWPORT_RATIO);
+    return Math.min(
+      albumStageFullHeight,
+      viewportHeight * ALBUM_STAGE_BASE_VIEWPORT_RATIO,
+    );
   });
 
   const albumStageCollapseProgress = $derived.by(() =>
-    clamp(albumStageCollapseOffset / ALBUM_STAGE_COLLAPSE_SCROLL_RANGE, 0, 1)
+    clamp(albumStageCollapseOffset / ALBUM_STAGE_COLLAPSE_SCROLL_RANGE, 0, 1),
   );
 
-  const albumStageRevealProgress = $derived.by(() =>
-    1 - albumStageCollapseProgress
+  const albumStageRevealProgress = $derived.by(
+    () => 1 - albumStageCollapseProgress,
   );
 
   const albumStageSolidifyProgress = $derived.by(() =>
     Math.max(
       albumStageCollapseProgress,
-      clamp(albumStageScrollTop / ALBUM_STAGE_SOLIDIFY_SCROLL_RANGE, 0, 1)
-    )
+      clamp(albumStageScrollTop / ALBUM_STAGE_SOLIDIFY_SCROLL_RANGE, 0, 1),
+    ),
   );
 
   const albumStageHeight = $derived.by(() => {
@@ -914,10 +1022,15 @@
       return 0;
     }
 
-    return albumStageBaseHeight + (albumStageFullHeight - albumStageBaseHeight) * albumStageRevealProgress;
+    return (
+      albumStageBaseHeight +
+      (albumStageFullHeight - albumStageBaseHeight) * albumStageRevealProgress
+    );
   });
 
-  const albumStageStyle = $derived.by(() => `--album-stage-aspect-ratio: ${albumStageAspectRatio}`);
+  const albumStageStyle = $derived.by(
+    () => `--album-stage-aspect-ratio: ${albumStageAspectRatio}`,
+  );
 
   type MotionTarget = Record<string, string | number>;
 
@@ -925,7 +1038,7 @@
     return {
       duration: prefersReducedMotion ? 0 : duration,
       delay: prefersReducedMotion ? 0 : delay,
-      ease: 'easeOut',
+      ease: "easeOut",
     };
   }
 
@@ -937,48 +1050,65 @@
     return { opacity };
   }
 
-  function axisEnter(axis: 'x' | 'y', offset: number): MotionTarget {
-    return prefersReducedMotion ? { opacity: 1 } : { opacity: 0, [axis]: offset };
+  function axisEnter(axis: "x" | "y", offset: number): MotionTarget {
+    return prefersReducedMotion
+      ? { opacity: 1 }
+      : { opacity: 0, [axis]: offset };
   }
 
-  function axisAnimate(axis: 'x' | 'y'): MotionTarget {
+  function axisAnimate(axis: "x" | "y"): MotionTarget {
     return { opacity: 1, [axis]: 0 };
   }
 
-  function axisExit(axis: 'x' | 'y', offset: number): MotionTarget {
-    return prefersReducedMotion ? { opacity: 0 } : { opacity: 0, [axis]: offset };
+  function axisExit(axis: "x" | "y", offset: number): MotionTarget {
+    return prefersReducedMotion
+      ? { opacity: 0 }
+      : { opacity: 0, [axis]: offset };
   }
 
-  const interactiveTransition = $derived.by(() => ({
-    duration: prefersReducedMotion ? 0 : 0.16,
-    ease: 'easeOut',
-  } as const));
+  const interactiveTransition = $derived.by(
+    () =>
+      ({
+        duration: prefersReducedMotion ? 0 : 0.16,
+        ease: "easeOut",
+      }) as const,
+  );
 
-  const albumStageMotionHeight = $derived.by(() => (
-    albumStageHeight > 0 ? albumStageHeight : Math.max(albumStageBaseHeight || 0, 280)
-  ));
+  const albumStageMotionHeight = $derived.by(() =>
+    albumStageHeight > 0
+      ? albumStageHeight
+      : Math.max(albumStageBaseHeight || 0, 280),
+  );
 
-  const albumStageMediaHeight = $derived.by(() => `${albumStageMotionHeight}px`);
-  const albumStageScrimOpacity = $derived.by(() => Math.max(0.58, 1 - albumStageSolidifyProgress * 0.34));
-  const albumStageImageOpacity = $derived.by(() => 1 - albumStageSolidifyProgress * 0.54);
+  const albumStageMediaHeight = $derived.by(
+    () => `${albumStageMotionHeight}px`,
+  );
+  const albumStageScrimOpacity = $derived.by(() =>
+    Math.max(0.58, 1 - albumStageSolidifyProgress * 0.34),
+  );
+  const albumStageImageOpacity = $derived.by(
+    () => 1 - albumStageSolidifyProgress * 0.54,
+  );
   const albumStageImageTransform = $derived.by(() =>
     prefersReducedMotion
-      ? 'translateZ(0) scale(1)'
-      : `translateZ(0) scale(${1 + albumStageRevealProgress * 0.006 + albumStageSolidifyProgress * 0.012})`
+      ? "translateZ(0) scale(1)"
+      : `translateZ(0) scale(${1 + albumStageRevealProgress * 0.006 + albumStageSolidifyProgress * 0.012})`,
   );
-  const albumStageSolidifyOpacity = $derived.by(() => albumStageSolidifyProgress);
+  const albumStageSolidifyOpacity = $derived.by(
+    () => albumStageSolidifyProgress,
+  );
 
   function modeButtonAnimate(active: boolean): MotionTarget {
     return active
       ? {
-          backgroundColor: 'var(--accent)',
-          color: '#ffffff',
-          boxShadow: '0 10px 22px rgba(var(--accent-rgb), 0.22)',
+          backgroundColor: "var(--accent)",
+          color: "#ffffff",
+          boxShadow: "0 10px 22px rgba(var(--accent-rgb), 0.22)",
         }
       : {
-          backgroundColor: 'rgba(15, 23, 42, 0)',
-          color: 'rgba(31, 41, 55, 0.72)',
-          boxShadow: '0 0 0 rgba(var(--accent-rgb), 0)',
+          backgroundColor: "rgba(15, 23, 42, 0)",
+          color: "rgba(31, 41, 55, 0.72)",
+          boxShadow: "0 0 0 rgba(var(--accent-rgb), 0)",
         };
   }
 
@@ -988,18 +1118,24 @@
     }
 
     return {
-      backgroundColor: 'rgba(15, 23, 42, 0.06)',
-      color: 'var(--text-primary)',
+      backgroundColor: "rgba(15, 23, 42, 0.06)",
+      color: "var(--text-primary)",
       ...(prefersReducedMotion ? {} : { y: -1 }),
     };
   }
 
-  function toolbarButtonAnimate(active = false, accented = false, disabled = false): MotionTarget {
+  function toolbarButtonAnimate(
+    active = false,
+    accented = false,
+    disabled = false,
+  ): MotionTarget {
     return {
       opacity: disabled ? 0.42 : 1,
-      backgroundColor: active ? 'var(--accent-light)' : 'rgba(255, 255, 255, 0.78)',
-      color: active || accented ? 'var(--accent)' : 'var(--text-primary)',
-      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.94)',
+      backgroundColor: active
+        ? "var(--accent-light)"
+        : "rgba(255, 255, 255, 0.78)",
+      color: active || accented ? "var(--accent)" : "var(--text-primary)",
+      boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.94)",
     };
   }
 
@@ -1009,8 +1145,8 @@
     }
 
     return {
-      backgroundColor: 'rgba(var(--accent-rgb), 0.1)',
-      boxShadow: '0 10px 22px rgba(var(--accent-rgb), 0.14)',
+      backgroundColor: "rgba(var(--accent-rgb), 0.1)",
+      boxShadow: "0 10px 22px rgba(var(--accent-rgb), 0.14)",
       ...(prefersReducedMotion ? {} : { y: -1 }),
     };
   }
@@ -1018,70 +1154,75 @@
   function appButtonAnimate(primary = false, disabled = false): MotionTarget {
     return primary
       ? {
-          backgroundColor: disabled ? 'var(--bg-tertiary)' : 'var(--accent)',
-          color: disabled ? 'var(--text-tertiary)' : '#ffffff',
-          boxShadow: disabled ? '0 0 0 rgba(var(--accent-rgb), 0)' : '0 10px 24px rgba(var(--accent-rgb), 0.16)',
+          backgroundColor: disabled ? "var(--bg-tertiary)" : "var(--accent)",
+          color: disabled ? "var(--text-tertiary)" : "#ffffff",
+          boxShadow: disabled
+            ? "0 0 0 rgba(var(--accent-rgb), 0)"
+            : "0 10px 24px rgba(var(--accent-rgb), 0.16)",
           opacity: disabled ? 0.72 : 1,
         }
       : {
-          backgroundColor: 'var(--bg-tertiary)',
-          color: 'var(--text-primary)',
-          boxShadow: '0 0 0 rgba(var(--accent-rgb), 0)',
+          backgroundColor: "var(--bg-tertiary)",
+          color: "var(--text-primary)",
+          boxShadow: "0 0 0 rgba(var(--accent-rgb), 0)",
           opacity: disabled ? 0.42 : 1,
         };
   }
 
-  function appButtonHover(primary = false, disabled = false): MotionTarget | undefined {
+  function appButtonHover(
+    primary = false,
+    disabled = false,
+  ): MotionTarget | undefined {
     if (disabled) return undefined;
 
     return primary
       ? {
-          backgroundColor: 'var(--accent-hover)',
-          boxShadow: '0 10px 24px rgba(var(--accent-rgb), 0.2)',
+          backgroundColor: "var(--accent-hover)",
+          boxShadow: "0 10px 24px rgba(var(--accent-rgb), 0.2)",
           ...(prefersReducedMotion ? {} : { y: -1 }),
         }
       : {
-          backgroundColor: 'var(--hover-bg-elevated)',
-          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
+          backgroundColor: "var(--hover-bg-elevated)",
+          boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
           ...(prefersReducedMotion ? {} : { y: -1 }),
         };
   }
 
   function settingsCloseAnimate(): MotionTarget {
     return {
-      backgroundColor: 'var(--bg-tertiary)',
-      color: 'var(--text-secondary)',
+      backgroundColor: "var(--bg-tertiary)",
+      color: "var(--text-secondary)",
     };
   }
 
   function settingsCloseHover(): MotionTarget {
     return {
-      backgroundColor: 'var(--hover-bg-elevated)',
-      color: 'var(--text-primary)',
+      backgroundColor: "var(--hover-bg-elevated)",
+      color: "var(--text-primary)",
       ...(prefersReducedMotion ? {} : { y: -1 }),
     };
   }
 
   function fieldAnimate(): MotionTarget {
     return {
-      backgroundColor: 'var(--bg-tertiary)',
-      borderColor: 'var(--border)',
-      color: 'var(--text-primary)',
-      boxShadow: '0 0 0 0 rgba(var(--accent-rgb), 0)',
+      backgroundColor: "var(--bg-tertiary)",
+      borderColor: "var(--border)",
+      color: "var(--text-primary)",
+      boxShadow: "0 0 0 0 rgba(var(--accent-rgb), 0)",
     };
   }
 
   function fieldHover(): MotionTarget {
     return {
-      borderColor: 'var(--text-tertiary)',
+      borderColor: "var(--text-tertiary)",
     };
   }
 
   function fieldFocus(): MotionTarget {
     return {
-      borderColor: 'var(--accent)',
-      backgroundColor: 'var(--accent-light)',
-      boxShadow: '0 0 0 3px rgba(var(--accent-rgb), 0.12)',
+      borderColor: "var(--accent)",
+      backgroundColor: "var(--accent-light)",
+      boxShadow: "0 0 0 3px rgba(var(--accent-rgb), 0.12)",
     };
   }
 
@@ -1114,7 +1255,8 @@
 
   $effect(() => {
     const paletteRequestSeq = ++themeRequestSeq;
-    const artworkUrl = selectedAlbum?.coverUrl ?? selectedAlbum?.coverDeUrl ?? null;
+    const artworkUrl =
+      selectedAlbum?.coverUrl ?? selectedAlbum?.coverDeUrl ?? null;
 
     if (!artworkUrl) {
       applyThemePalette(DEFAULT_THEME_PALETTE);
@@ -1129,7 +1271,7 @@
       } catch (e) {
         if (paletteRequestSeq !== themeRequestSeq) return;
         applyThemePalette(DEFAULT_THEME_PALETTE);
-        console.error('[ERROR] Failed to extract album theme:', e);
+        console.error("[ERROR] Failed to extract album theme:", e);
       }
     })();
   });
@@ -1139,7 +1281,7 @@
 
     syncAlbumStageWidth();
 
-    if (typeof ResizeObserver === 'undefined') return;
+    if (typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver(() => {
       syncAlbumStageWidth();
@@ -1151,24 +1293,54 @@
   });
 
   $effect(() => {
-    if (typeof window === 'undefined' || !downloadLyricsPrefReady) return;
+    if (typeof window === "undefined" || !downloadLyricsPrefReady) return;
 
     try {
-      window.localStorage.setItem(DOWNLOAD_LYRICS_PREF_KEY, downloadLyrics ? '1' : '0');
+      window.localStorage.setItem(
+        DOWNLOAD_LYRICS_PREF_KEY,
+        downloadLyrics ? "1" : "0",
+      );
     } catch {
       // ignore storage failures
     }
   });
 
+  $effect(() => {
+    if (typeof window === "undefined" || !notifyPrefReady) return;
+
+    try {
+      window.localStorage.setItem(
+        NOTIFY_DOWNLOAD_PREF_KEY,
+        notifyOnDownloadComplete ? "1" : "0",
+      );
+      window.localStorage.setItem(
+        NOTIFY_PLAYBACK_PREF_KEY,
+        notifyOnPlaybackChange ? "1" : "0",
+      );
+    } catch {
+      // ignore storage failures
+    }
+
+    const preferences: NotificationPreferences = {
+      notifyOnDownloadComplete,
+      notifyOnPlaybackChange,
+    };
+    void setNotificationPreferences(preferences).catch(() => {
+      // ignore backend sync failures
+    });
+  });
+
   onMount(() => {
-    isMacOS = /Mac|iPhone|iPad|iPod/.test(navigator.platform) || navigator.userAgent.includes('Mac');
+    isMacOS =
+      /Mac|iPhone|iPad|iPod/.test(navigator.platform) ||
+      navigator.userAgent.includes("Mac");
 
     let unlistenState: (() => void) | null = null;
     let unlistenProgress: (() => void) | null = null;
     let unlistenDownloadManager: (() => void) | null = null;
     let unlistenDownloadJob: (() => void) | null = null;
     let unlistenDownloadProgress: (() => void) | null = null;
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     function updateReducedMotionPreference() {
       prefersReducedMotion = mediaQuery.matches;
@@ -1182,14 +1354,31 @@
     async function initialize() {
       loadingAlbums = true;
       try {
+        const backendPreferences = await getNotificationPreferences();
+        notifyOnDownloadComplete = backendPreferences.notifyOnDownloadComplete;
+        notifyOnPlaybackChange = backendPreferences.notifyOnPlaybackChange;
+
         const stored = window.localStorage.getItem(DOWNLOAD_LYRICS_PREF_KEY);
         if (stored !== null) {
-          downloadLyrics = stored === '1';
+          downloadLyrics = stored === "1";
+        }
+        const storedDownload = window.localStorage.getItem(
+          NOTIFY_DOWNLOAD_PREF_KEY,
+        );
+        if (storedDownload !== null) {
+          notifyOnDownloadComplete = storedDownload === "1";
+        }
+        const storedPlayback = window.localStorage.getItem(
+          NOTIFY_PLAYBACK_PREF_KEY,
+        );
+        if (storedPlayback !== null) {
+          notifyOnPlaybackChange = storedPlayback === "1";
         }
       } catch {
         // ignore storage failures
       } finally {
         downloadLyricsPrefReady = true;
+        notifyPrefReady = true;
       }
 
       try {
@@ -1203,43 +1392,51 @@
         }
       } catch (e) {
         errorMsg = e instanceof Error ? e.message : String(e);
-        console.error('[ERROR] Failed to load albums:', e);
+        console.error("[ERROR] Failed to load albums:", e);
       } finally {
         loadingAlbums = false;
       }
 
-      unlistenState = await listen<PlayerState>('player-state-changed', (event) => {
-        syncPlayerState(event.payload);
-      });
+      unlistenState = await listen<PlayerState>(
+        "player-state-changed",
+        (event) => {
+          syncPlayerState(event.payload);
+        },
+      );
 
-      unlistenProgress = await listen<PlayerState>('player-progress', (event) => {
-        const state = event.payload;
-        progress = state.progress;
-        isPlaying = state.isPlaying;
-        isPaused = state.isPaused;
-        duration = state.duration;
-      });
+      unlistenProgress = await listen<PlayerState>(
+        "player-progress",
+        (event) => {
+          const state = event.payload;
+          progress = state.progress;
+          isPlaying = state.isPlaying;
+          isPaused = state.isPaused;
+          duration = state.duration;
+        },
+      );
 
       // Subscribe to download events
       unlistenDownloadManager = await listen<DownloadManagerSnapshot>(
-        'download-manager-state-changed',
+        "download-manager-state-changed",
         (event) => {
           downloadManager = event.payload;
         },
       );
 
       unlistenDownloadJob = await listen<DownloadJobSnapshot>(
-        'download-job-updated',
+        "download-job-updated",
         (event) => {
           const job = event.payload;
           if (!downloadManager) return;
-          const jobs = downloadManager.jobs.map((j) => (j.id === job.id ? job : j));
+          const jobs = downloadManager.jobs.map((j) =>
+            j.id === job.id ? job : j,
+          );
           downloadManager = { ...downloadManager, jobs };
         },
       );
 
       unlistenDownloadProgress = await listen<DownloadTaskProgressEvent>(
-        'download-task-progress',
+        "download-task-progress",
         (event) => {
           // Progress events update individual tasks in the manager state.
           // The job-updated event carries the full snapshot, so we just
@@ -1250,7 +1447,9 @@
           // Update speed map
           taskSpeedMap.set(progress.taskId, progress.speedBytesPerSec);
 
-          const jobIdx = downloadManager.jobs.findIndex((j) => j.id === progress.jobId);
+          const jobIdx = downloadManager.jobs.findIndex(
+            (j) => j.id === progress.jobId,
+          );
           if (jobIdx < 0) return;
           const job = downloadManager.jobs[jobIdx];
           const taskIdx = job.tasks.findIndex((t) => t.id === progress.taskId);
@@ -1280,8 +1479,8 @@
 
     syncViewportHeight();
     updateReducedMotionPreference();
-    mediaQuery.addEventListener('change', updateReducedMotionPreference);
-    window.addEventListener('resize', handleWindowResize, { passive: true });
+    mediaQuery.addEventListener("change", updateReducedMotionPreference);
+    window.addEventListener("resize", handleWindowResize, { passive: true });
     void initialize();
 
     return () => {
@@ -1294,8 +1493,8 @@
       unlistenDownloadManager?.();
       unlistenDownloadJob?.();
       unlistenDownloadProgress?.();
-      mediaQuery.removeEventListener('change', updateReducedMotionPreference);
-      window.removeEventListener('resize', handleWindowResize);
+      mediaQuery.removeEventListener("change", updateReducedMotionPreference);
+      window.removeEventListener("resize", handleWindowResize);
     };
   });
 
@@ -1306,7 +1505,7 @@
       lyricRequestSeq += 1;
       lyricsSongCid = null;
       lyricsLines = [];
-      lyricsError = '';
+      lyricsError = "";
       lyricsLoading = false;
       lyricsOpen = false;
       playlistOpen = false;
@@ -1325,9 +1524,7 @@
     const songCid = currentSong?.cid ?? null;
     const playbackActive = isPlaying || isPaused || isLoading;
     const hasReachedEnd =
-      !!songCid &&
-      duration > 0 &&
-      progress >= Math.max(0, duration - 0.35);
+      !!songCid && duration > 0 && progress >= Math.max(0, duration - 0.35);
     const shouldAutoAdvance =
       !!songCid &&
       songCid === lastPlaybackSnapshot.cid &&
@@ -1370,13 +1567,13 @@
       if (requestSeq !== albumRequestSeq) return;
       selectedAlbum = detail;
       setAlbumStageAspectRatio(artworkAspectRatio);
-      errorMsg = '';
+      errorMsg = "";
       await tick();
       resetContentScroll();
     } catch (e) {
       if (requestSeq !== albumRequestSeq) return;
       errorMsg = e instanceof Error ? e.message : String(e);
-      console.error('[ERROR] Failed to load album detail:', e);
+      console.error("[ERROR] Failed to load album detail:", e);
     } finally {
       if (requestSeq !== albumRequestSeq) return;
       // Ensure minimum display time so animations aren't interrupted
@@ -1398,7 +1595,8 @@
 
     const nextScrollTop = Math.max(0, contentEl?.scrollTop ?? 0);
     const nextCollapseOffset =
-      nextScrollTop > 0 && pendingAlbumStageCollapseOffset < ALBUM_STAGE_COLLAPSE_SCROLL_RANGE
+      nextScrollTop > 0 &&
+      pendingAlbumStageCollapseOffset < ALBUM_STAGE_COLLAPSE_SCROLL_RANGE
         ? ALBUM_STAGE_COLLAPSE_SCROLL_RANGE
         : undefined;
 
@@ -1419,13 +1617,16 @@
       return;
     }
 
-    if (event.deltaY > 0 && pendingAlbumStageCollapseOffset < ALBUM_STAGE_COLLAPSE_SCROLL_RANGE) {
+    if (
+      event.deltaY > 0 &&
+      pendingAlbumStageCollapseOffset < ALBUM_STAGE_COLLAPSE_SCROLL_RANGE
+    ) {
       event.preventDefault();
       scheduleAlbumStageMotion({
         collapseOffset: clamp(
           pendingAlbumStageCollapseOffset + event.deltaY,
           0,
-          ALBUM_STAGE_COLLAPSE_SCROLL_RANGE
+          ALBUM_STAGE_COLLAPSE_SCROLL_RANGE,
         ),
         scrollTop: 0,
       });
@@ -1438,7 +1639,7 @@
         collapseOffset: clamp(
           pendingAlbumStageCollapseOffset + event.deltaY,
           0,
-          ALBUM_STAGE_COLLAPSE_SCROLL_RANGE
+          ALBUM_STAGE_COLLAPSE_SCROLL_RANGE,
         ),
         scrollTop: 0,
       });
@@ -1449,6 +1650,10 @@
   let isClearingAudioCache = $state(false);
   let downloadLyrics = $state(true);
   let downloadLyricsPrefReady = $state(false);
+  let notifyOnDownloadComplete = $state(true);
+  let notifyOnPlaybackChange = $state(true);
+  let notifyPrefReady = $state(false);
+  let isSendingTestNotification = $state(false);
   let isFormatHovered = $state(false);
   let isFormatFocused = $state(false);
   let isOutputDirHovered = $state(false);
@@ -1464,12 +1669,30 @@
     isClearingAudioCache = true;
     try {
       const removed = await clearAudioCache();
-      alert(removed > 0 ? `已清除 ${removed} 个音频缓存文件` : '当前没有可清除的音频缓存');
+      alert(
+        removed > 0
+          ? `已清除 ${removed} 个音频缓存文件`
+          : "当前没有可清除的音频缓存",
+      );
     } catch (e) {
-      console.error('[ERROR] Failed to clear audio cache:', e);
+      console.error("[ERROR] Failed to clear audio cache:", e);
       alert(`清除音频缓存失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       isClearingAudioCache = false;
+    }
+  }
+
+  async function handleSendTestNotification() {
+    if (isSendingTestNotification) return;
+    isSendingTestNotification = true;
+    try {
+      await sendTestNotification();
+      alert("测试通知已请求发送，请观察系统通知中心或终端日志。");
+    } catch (e) {
+      console.error("[ERROR] Failed to send test notification:", e);
+      alert(`发送测试通知失败：${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      isSendingTestNotification = false;
     }
   }
 
@@ -1477,19 +1700,28 @@
   function getActiveDownloadJob(): DownloadJobSnapshot | null {
     if (!downloadManager) return null;
     if (downloadManager.activeJobId) {
-      return downloadManager.jobs.find((j) => j.id === downloadManager.activeJobId) ?? null;
+      return (
+        downloadManager.jobs.find(
+          (j) => j.id === downloadManager.activeJobId,
+        ) ?? null
+      );
     }
     // Fallback: find first running job
-    return downloadManager.jobs.find((j) => j.status === 'running') ?? null;
+    return downloadManager.jobs.find((j) => j.status === "running") ?? null;
   }
 
   function formatByteSize(bytes: number | null | undefined): string {
-    if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) {
-      return '未知大小';
+    if (
+      bytes === null ||
+      bytes === undefined ||
+      !Number.isFinite(bytes) ||
+      bytes < 0
+    ) {
+      return "未知大小";
     }
 
     if (bytes < 1024) return `${bytes} B`;
-    const units = ['KB', 'MB', 'GB', 'TB'];
+    const units = ["KB", "MB", "GB", "TB"];
     let value = bytes;
     let unitIndex = -1;
 
@@ -1504,7 +1736,7 @@
 
   function formatSpeed(bytesPerSec: number): string {
     if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`;
-    const units = ['KB/s', 'MB/s', 'GB/s'];
+    const units = ["KB/s", "MB/s", "GB/s"];
     let value = bytesPerSec;
     let unitIndex = -1;
 
@@ -1518,14 +1750,21 @@
   }
 
   function getTaskProgressLabel(task: DownloadTaskSnapshot): string | null {
-    if (task.status !== 'downloading' && task.status !== 'writing') {
+    if (task.status !== "downloading" && task.status !== "writing") {
       return null;
     }
 
-    if (task.status === 'downloading' && task.bytesTotal && task.bytesTotal > 0) {
-      const percent = Math.min(Math.round(task.bytesDone / task.bytesTotal * 100), 100);
+    if (
+      task.status === "downloading" &&
+      task.bytesTotal &&
+      task.bytesTotal > 0
+    ) {
+      const percent = Math.min(
+        Math.round((task.bytesDone / task.bytesTotal) * 100),
+        100,
+      );
       const speed = taskSpeedMap.get(task.id);
-      const speedText = speed && speed > 0 ? ` · ${formatSpeed(speed)}` : '';
+      const speedText = speed && speed > 0 ? ` · ${formatSpeed(speed)}` : "";
       return `${formatByteSize(task.bytesDone)} / ${formatByteSize(task.bytesTotal)} · ${percent}%${speedText}`;
     }
 
@@ -1533,7 +1772,7 @@
       return `${formatByteSize(task.bytesDone)} 已处理`;
     }
 
-    return task.status === 'writing' ? '正在整理文件...' : '正在接收数据...';
+    return task.status === "writing" ? "正在整理文件..." : "正在接收数据...";
   }
 
   function getTaskErrorLabel(task: DownloadTaskSnapshot): string | null {
@@ -1547,12 +1786,16 @@
   }
 
   function getJobErrorSummary(job: DownloadJobSnapshot): string | null {
-    const firstFailedTask = job.tasks.find((task) => task.status === 'failed' && task.error);
+    const firstFailedTask = job.tasks.find(
+      (task) => task.status === "failed" && task.error,
+    );
     if (firstFailedTask) {
       return getTaskErrorLabel(firstFailedTask);
     }
 
-    const firstCancelledTask = job.tasks.find((task) => task.status === 'cancelled' && task.error);
+    const firstCancelledTask = job.tasks.find(
+      (task) => task.status === "cancelled" && task.error,
+    );
     if (firstCancelledTask) {
       return getTaskErrorLabel(firstCancelledTask);
     }
@@ -1567,9 +1810,13 @@
   }
 
   function getJobProgressText(job: DownloadJobSnapshot): string {
-    const terminalCount = job.completedTaskCount + job.failedTaskCount + job.cancelledTaskCount;
-    const activeTask = job.tasks.find((task) =>
-      task.status === 'preparing' || task.status === 'downloading' || task.status === 'writing'
+    const terminalCount =
+      job.completedTaskCount + job.failedTaskCount + job.cancelledTaskCount;
+    const activeTask = job.tasks.find(
+      (task) =>
+        task.status === "preparing" ||
+        task.status === "downloading" ||
+        task.status === "writing",
     );
 
     const base = `${terminalCount}/${job.taskCount} 首已结束`;
@@ -1588,43 +1835,53 @@
   function getJobProgress(job: DownloadJobSnapshot): number {
     if (job.taskCount === 0) return 0;
 
-    const terminalCount = job.completedTaskCount + job.failedTaskCount + job.cancelledTaskCount;
-    const activeTask = job.tasks.find((task) =>
-      task.status === 'preparing' || task.status === 'downloading' || task.status === 'writing'
+    const terminalCount =
+      job.completedTaskCount + job.failedTaskCount + job.cancelledTaskCount;
+    const activeTask = job.tasks.find(
+      (task) =>
+        task.status === "preparing" ||
+        task.status === "downloading" ||
+        task.status === "writing",
     );
 
     if (!activeTask) {
       return terminalCount / job.taskCount;
     }
 
-    const activeTaskProgress = activeTask.status === 'downloading' && activeTask.bytesTotal
-      ? activeTask.bytesDone / activeTask.bytesTotal
-      : activeTask.status === 'writing'
-        ? 1
-        : 0;
+    const activeTaskProgress =
+      activeTask.status === "downloading" && activeTask.bytesTotal
+        ? activeTask.bytesDone / activeTask.bytesTotal
+        : activeTask.status === "writing"
+          ? 1
+          : 0;
 
     return Math.min((terminalCount + activeTaskProgress) / job.taskCount, 1);
   }
 
   function getJobStatusLabel(job: DownloadJobSnapshot): string {
     switch (job.status) {
-      case 'queued':
-        return '排队中';
-      case 'running': {
-        const activeTask = job.tasks.find((task) =>
-          task.status === 'preparing' || task.status === 'downloading' || task.status === 'writing'
+      case "queued":
+        return "排队中";
+      case "running": {
+        const activeTask = job.tasks.find(
+          (task) =>
+            task.status === "preparing" ||
+            task.status === "downloading" ||
+            task.status === "writing",
         );
-        const currentIndex = activeTask ? activeTask.songIndex + 1 : job.completedTaskCount;
+        const currentIndex = activeTask
+          ? activeTask.songIndex + 1
+          : job.completedTaskCount;
         return `下载中 (${currentIndex}/${job.taskCount})`;
       }
-      case 'completed':
-        return '已完成';
-      case 'partiallyFailed':
+      case "completed":
+        return "已完成";
+      case "partiallyFailed":
         return `部分失败 (${job.failedTaskCount}/${job.taskCount})`;
-      case 'failed':
-        return '失败';
-      case 'cancelled':
-        return '已取消';
+      case "failed":
+        return "失败";
+      case "cancelled":
+        return "已取消";
       default:
         return job.status;
     }
@@ -1632,24 +1889,24 @@
 
   function getTaskStatusLabel(task: DownloadTaskSnapshot): string {
     switch (task.status) {
-      case 'queued':
-        return '排队中';
-      case 'preparing':
-        return '准备中';
-      case 'downloading': {
+      case "queued":
+        return "排队中";
+      case "preparing":
+        return "准备中";
+      case "downloading": {
         const progressLabel = getTaskProgressLabel(task);
-        return progressLabel ?? '下载中...';
+        return progressLabel ?? "下载中...";
       }
-      case 'writing': {
+      case "writing": {
         const progressLabel = getTaskProgressLabel(task);
-        return progressLabel ? `写入中 · ${progressLabel}` : '写入中';
+        return progressLabel ? `写入中 · ${progressLabel}` : "写入中";
       }
-      case 'completed':
-        return '已完成';
-      case 'failed':
-        return '失败';
-      case 'cancelled':
-        return '已取消';
+      case "completed":
+        return "已完成";
+      case "failed":
+        return "失败";
+      case "cancelled":
+        return "已取消";
       default:
         return task.status;
     }
@@ -1657,12 +1914,12 @@
 
   function getJobKindLabel(job: DownloadJobSnapshot): string {
     switch (job.kind) {
-      case 'song':
-        return '单曲下载';
-      case 'album':
-        return '整专下载';
-      case 'selection':
-        return '多选下载';
+      case "song":
+        return "单曲下载";
+      case "album":
+        return "整专下载";
+      case "selection":
+        return "多选下载";
       default:
         return job.kind;
     }
@@ -1676,7 +1933,7 @@
     const albumCount = getSelectionJobAlbumCount(job);
     if (albumCount <= 1) {
       const albumName = job.tasks[0]?.albumName;
-      return albumName ? `来自《${albumName}》` : '来自同一张专辑';
+      return albumName ? `来自《${albumName}》` : "来自同一张专辑";
     }
 
     return `跨 ${albumCount} 张专辑`;
@@ -1684,13 +1941,13 @@
 
   function getJobSummaryLabel(job: DownloadJobSnapshot): string {
     switch (job.kind) {
-      case 'song': {
+      case "song": {
         const task = job.tasks[0];
-        return task?.albumName ? `来自《${task.albumName}》` : '单曲任务';
+        return task?.albumName ? `来自《${task.albumName}》` : "单曲任务";
       }
-      case 'album':
+      case "album":
         return `${job.taskCount} 首歌曲`;
-      case 'selection': {
+      case "selection": {
         if (job.taskCount <= 1) {
           return getSelectionJobScopeLabel(job);
         }
@@ -1712,22 +1969,25 @@
   }
 
   function canCancelTask(task: DownloadTaskSnapshot): boolean {
-    return task.status === 'queued'
-      || task.status === 'preparing'
-      || task.status === 'downloading'
-      || task.status === 'writing';
+    return (
+      task.status === "queued" ||
+      task.status === "preparing" ||
+      task.status === "downloading" ||
+      task.status === "writing"
+    );
   }
 
   function canRetryTask(task: DownloadTaskSnapshot): boolean {
-    return task.status === 'failed' || task.status === 'cancelled';
+    return task.status === "failed" || task.status === "cancelled";
   }
 
   function canClearDownloadHistory(): boolean {
-    return !!downloadManager?.jobs.some((job) =>
-      job.status === 'completed'
-        || job.status === 'failed'
-        || job.status === 'cancelled'
-        || job.status === 'partiallyFailed'
+    return !!downloadManager?.jobs.some(
+      (job) =>
+        job.status === "completed" ||
+        job.status === "failed" ||
+        job.status === "cancelled" ||
+        job.status === "partiallyFailed",
     );
   }
 
@@ -1735,7 +1995,7 @@
     try {
       await cancelDownloadJob(jobId);
     } catch (e) {
-      console.error('[ERROR] Failed to cancel download job:', e);
+      console.error("[ERROR] Failed to cancel download job:", e);
     }
   }
 
@@ -1743,7 +2003,7 @@
     try {
       await cancelDownloadTask(jobId, taskId);
     } catch (e) {
-      console.error('[ERROR] Failed to cancel download task:', e);
+      console.error("[ERROR] Failed to cancel download task:", e);
     }
   }
 
@@ -1751,7 +2011,7 @@
     try {
       await retryDownloadJob(jobId);
     } catch (e) {
-      console.error('[ERROR] Failed to retry download job:', e);
+      console.error("[ERROR] Failed to retry download job:", e);
     }
   }
 
@@ -1759,7 +2019,7 @@
     try {
       await retryDownloadTask(jobId, taskId);
     } catch (e) {
-      console.error('[ERROR] Failed to retry download task:', e);
+      console.error("[ERROR] Failed to retry download task:", e);
     }
   }
 
@@ -1767,10 +2027,10 @@
     try {
       const removed = await clearDownloadHistory();
       if (removed === 0) {
-        alert('当前没有可清理的下载历史。');
+        alert("当前没有可清理的下载历史。");
       }
     } catch (e) {
-      console.error('[ERROR] Failed to clear download history:', e);
+      console.error("[ERROR] Failed to clear download history:", e);
       alert(`清理下载历史失败：${e instanceof Error ? e.message : String(e)}`);
     }
   }
@@ -1780,11 +2040,13 @@
       const existingJob = getSongDownloadJob(song.cid);
       await performSongDownload(song.cid);
       if (existingJob) {
-        alert('这首歌的下载任务已在队列中或正在执行。');
+        alert("这首歌的下载任务已在队列中或正在执行。");
       }
     } catch (error) {
-      console.error('[ERROR] Failed to download song:', error);
-      alert(`下载失败：${error instanceof Error ? error.message : String(error)}`);
+      console.error("[ERROR] Failed to download song:", error);
+      alert(
+        `下载失败：${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -1811,7 +2073,7 @@
     try {
       await pausePlayback();
     } catch (e) {
-      console.error('[ERROR] Failed to pause playback:', e);
+      console.error("[ERROR] Failed to pause playback:", e);
     }
   }
 
@@ -1819,7 +2081,7 @@
     try {
       await resumePlayback();
     } catch (e) {
-      console.error('[ERROR] Failed to resume playback:', e);
+      console.error("[ERROR] Failed to resume playback:", e);
     }
   }
 
@@ -1828,7 +2090,7 @@
     try {
       await seekCurrentPlayback(positionSecs);
     } catch (e) {
-      console.error('[ERROR] Failed to seek playback:', e);
+      console.error("[ERROR] Failed to seek playback:", e);
     }
   }
 
@@ -1852,7 +2114,11 @@
     const previousIndex = resolveWrappedQueueIndex(-1);
     if (previousIndex < 0) return;
 
-    await playQueueEntry(playbackOrder[previousIndex], playbackOrder, previousIndex);
+    await playQueueEntry(
+      playbackOrder[previousIndex],
+      playbackOrder,
+      previousIndex,
+    );
   }
 
   // Refresh cache and reload current album
@@ -1893,7 +2159,7 @@
         }
       } catch (e) {
         if (requestSeq === albumRequestSeq) {
-          console.error('[ERROR] Failed to reload album:', e);
+          console.error("[ERROR] Failed to reload album:", e);
         }
       } finally {
         if (requestSeq === albumRequestSeq) {
@@ -1910,7 +2176,11 @@
 </script>
 
 {#if isMacOS}
-  <div class="macos-window-drag-region" data-tauri-drag-region aria-hidden="true"></div>
+  <div
+    class="macos-window-drag-region"
+    data-tauri-drag-region
+    aria-hidden="true"
+  ></div>
 {/if}
 
 <div class="container" class:macos-overlay={isMacOS}>
@@ -1923,16 +2193,27 @@
     defer
   >
     {#if isMacOS}
-      <div class="sidebar-drag-region" data-tauri-drag-region aria-hidden="true"></div>
+      <div
+        class="sidebar-drag-region"
+        data-tauri-drag-region
+        aria-hidden="true"
+      ></div>
     {/if}
     <h2 class="section-title">专辑</h2>
     {#if loadingAlbums}
-      <div class="loading"><span>正在加载专辑...</span><MotionSpinner className="inline-loading-spinner" reducedMotion={prefersReducedMotion} /></div>
+      <div class="loading">
+        <span>正在加载专辑...</span><MotionSpinner
+          className="inline-loading-spinner"
+          reducedMotion={prefersReducedMotion}
+        />
+      </div>
     {:else if errorMsg && albums.length === 0}
       <div class="empty-state">
         <div class="empty-icon">⚠️</div>
         <div class="empty-text">加载失败</div>
-        <div class="empty-text" style="margin-top: 8px; font-size: 12px;">{errorMsg}</div>
+        <div class="empty-text" style="margin-top: 8px; font-size: 12px;">
+          {errorMsg}
+        </div>
       </div>
     {:else}
       <div class="album-list">
@@ -1950,7 +2231,11 @@
 
   <section class="main-region">
     {#if isMacOS}
-      <div class="main-drag-region" data-tauri-drag-region aria-hidden="true"></div>
+      <div
+        class="main-drag-region"
+        data-tauri-drag-region
+        aria-hidden="true"
+      ></div>
     {/if}
 
     <div class="top-actions">
@@ -1963,18 +2248,37 @@
           title="刷新缓存"
           animate={toolbarButtonAnimate(false, false, isRefreshing)}
           whileHover={toolbarButtonHover(isRefreshing)}
-          whileTap={!prefersReducedMotion && !isRefreshing ? { y: 0, scale: 0.96, opacity: 0.92 } : undefined}
+          whileTap={!prefersReducedMotion && !isRefreshing
+            ? { y: 0, scale: 0.96, opacity: 0.92 }
+            : undefined}
           transition={interactiveTransition}
         >
-          <motion.svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" animate={isRefreshing && !prefersReducedMotion ? { rotate: 360 } : { rotate: 0 }} transition={{ duration: prefersReducedMotion ? 0 : 0.9, ease: 'linear', repeat: isRefreshing && !prefersReducedMotion ? Infinity : 0 }}>
-            <path d="M21 12a9 9 0 1 1-6.86-8.72"/>
-            <polyline points="21 3 21 12 12 12"/>
+          <motion.svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            animate={isRefreshing && !prefersReducedMotion
+              ? { rotate: 360 }
+              : { rotate: 0 }}
+            transition={{
+              duration: prefersReducedMotion ? 0 : 0.9,
+              ease: "linear",
+              repeat: isRefreshing && !prefersReducedMotion ? Infinity : 0,
+            }}
+          >
+            <path d="M21 12a9 9 0 1 1-6.86-8.72" />
+            <polyline points="21 3 21 12 12 12" />
           </motion.svg>
         </motion.button>
 
         <!-- Download panel button -->
         <motion.button
-          class={`toolbar-icon-btn${downloadPanelOpen ? ' active' : ''}`}
+          class={`toolbar-icon-btn${downloadPanelOpen ? " active" : ""}`}
           onclick={() => {
             downloadPanelOpen = !downloadPanelOpen;
             if (downloadPanelOpen) settingsOpen = false;
@@ -1984,14 +2288,25 @@
           title="下载任务"
           animate={toolbarButtonAnimate(downloadPanelOpen, false, false)}
           whileHover={toolbarButtonHover(false)}
-          whileTap={prefersReducedMotion ? undefined : { y: 0, scale: 0.96, opacity: 0.92 }}
+          whileTap={prefersReducedMotion
+            ? undefined
+            : { y: 0, scale: 0.96, opacity: 0.92 }}
           transition={interactiveTransition}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3v12"/>
-            <path d="m8 11 4 4 4-4"/>
-            <path d="M20 17H4"/>
-            <path d="M20 21H4"/>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 3v12" />
+            <path d="m8 11 4 4 4-4" />
+            <path d="M20 17H4" />
+            <path d="M20 21H4" />
           </svg>
           {#if activeDownloadCount > 0}
             <span class="toolbar-badge">{activeDownloadCount}</span>
@@ -1999,7 +2314,7 @@
         </motion.button>
 
         <motion.button
-          class={`toolbar-icon-btn${settingsOpen ? ' active' : ''}`}
+          class={`toolbar-icon-btn${settingsOpen ? " active" : ""}`}
           onclick={() => {
             settingsOpen = !settingsOpen;
             if (settingsOpen) downloadPanelOpen = false;
@@ -2009,12 +2324,25 @@
           title="下载设置"
           animate={toolbarButtonAnimate(settingsOpen, false, false)}
           whileHover={toolbarButtonHover(false)}
-          whileTap={prefersReducedMotion ? undefined : { y: 0, scale: 0.96, opacity: 0.92 }}
+          whileTap={prefersReducedMotion
+            ? undefined
+            : { y: 0, scale: 0.96, opacity: 0.92 }}
           transition={interactiveTransition}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-            <circle cx="12" cy="12" r="3"/>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+            />
+            <circle cx="12" cy="12" r="3" />
           </svg>
         </motion.button>
       </div>
@@ -2023,7 +2351,7 @@
     <!-- 歌曲列表内容区 -->
     <OverlayScrollbarsComponent
       element="main"
-      class={`content${currentSong ? ' content-with-player' : ''}${loadingDetail && selectedAlbum ? ' content-pending' : ''}`}
+      class={`content${currentSong ? " content-with-player" : ""}${loadingDetail && selectedAlbum ? " content-pending" : ""}`}
       data-overlayscrollbars-initialize
       bind:this={contentScrollbar}
       options={overlayScrollbarOptions}
@@ -2042,21 +2370,31 @@
             exit={fadeExit()}
             transition={motionTransition(PANEL_DURATION)}
           >
-            <div class="album-stage" bind:this={albumStageEl} style={albumStageStyle}>
+            <div
+              class="album-stage"
+              bind:this={albumStageEl}
+              style={albumStageStyle}
+            >
               <div class="album-stage-frame">
                 <div
                   class="album-stage-media album-stage-media-loading"
                   style:height={albumStageMediaHeight}
                 >
                   <div class="album-stage-media-content">
-                    <MotionPulseBlock className="album-stage-skeleton loading-cover" reducedMotion={prefersReducedMotion} />
+                    <MotionPulseBlock
+                      className="album-stage-skeleton loading-cover"
+                      reducedMotion={prefersReducedMotion}
+                    />
                   </div>
                   <div
                     class="album-stage-media-scrim"
                     aria-hidden="true"
                     style:opacity={albumStageScrimOpacity}
                   ></div>
-                  <div class="album-stage-media-border" aria-hidden="true"></div>
+                  <div
+                    class="album-stage-media-border"
+                    aria-hidden="true"
+                  ></div>
                   <div class="album-stage-divider" aria-hidden="true"></div>
                 </div>
               </div>
@@ -2076,8 +2414,15 @@
                   exit={fadeExit()}
                   transition={motionTransition(HERO_DURATION, HERO_DELAY)}
                 >
-                  <MotionPulseBlock className="album-hero-title loading-text" reducedMotion={prefersReducedMotion} />
-                  <MotionPulseBlock className="album-hero-sub loading-text-sub" reducedMotion={prefersReducedMotion} delay={0.14} />
+                  <MotionPulseBlock
+                    className="album-hero-title loading-text"
+                    reducedMotion={prefersReducedMotion}
+                  />
+                  <MotionPulseBlock
+                    className="album-hero-sub loading-text-sub"
+                    reducedMotion={prefersReducedMotion}
+                    delay={0.14}
+                  />
                 </motion.div>
               </div>
               <motion.div
@@ -2087,7 +2432,10 @@
                 exit={fadeExit()}
                 transition={motionTransition(LIST_DURATION, LIST_DELAY)}
               >
-                <span>正在加载歌曲...</span><MotionSpinner className="inline-loading-spinner" reducedMotion={prefersReducedMotion} />
+                <span>正在加载歌曲...</span><MotionSpinner
+                  className="inline-loading-spinner"
+                  reducedMotion={prefersReducedMotion}
+                />
               </motion.div>
             </motion.div>
           </motion.section>
@@ -2100,7 +2448,11 @@
             exit={fadeExit()}
             transition={motionTransition(PANEL_DURATION)}
           >
-            <div class="album-stage" bind:this={albumStageEl} style={albumStageStyle}>
+            <div
+              class="album-stage"
+              bind:this={albumStageEl}
+              style={albumStageStyle}
+            >
               <div class="album-stage-frame">
                 <div
                   class="album-stage-media"
@@ -2126,7 +2478,10 @@
                     aria-hidden="true"
                     style:opacity={albumStageScrimOpacity}
                   ></div>
-                  <div class="album-stage-media-border" aria-hidden="true"></div>
+                  <div
+                    class="album-stage-media-border"
+                    aria-hidden="true"
+                  ></div>
                   <div class="album-stage-divider" aria-hidden="true"></div>
                 </div>
               </div>
@@ -2141,32 +2496,53 @@
               <div class="album-hero">
                 <motion.div
                   class="album-hero-info"
-                  initial={axisEnter('y', 14)}
-                  animate={axisAnimate('y')}
-                  exit={axisExit('y', 8)}
+                  initial={axisEnter("y", 14)}
+                  animate={axisAnimate("y")}
+                  exit={axisExit("y", 8)}
                   transition={motionTransition(HERO_DURATION, HERO_DELAY)}
                 >
                   {#if selectedAlbum.belong}
-                    <span class="album-belong-tag">{selectedAlbum.belong.toUpperCase()}</span>
+                    <span class="album-belong-tag"
+                      >{selectedAlbum.belong.toUpperCase()}</span
+                    >
                   {/if}
                   <h1 class="album-hero-title">{selectedAlbum.name}</h1>
                   {#if selectedAlbum.artists && selectedAlbum.artists.length > 0}
-                    <p class="album-hero-artists">{selectedAlbum.artists.join(', ')}</p>
+                    <p class="album-hero-artists">
+                      {selectedAlbum.artists.join(", ")}
+                    </p>
                   {/if}
                   {#if selectedAlbum.intro}
                     <p class="album-hero-intro">{selectedAlbum.intro}</p>
                   {/if}
                   <div class="album-hero-meta">
-                    <span class="album-song-count">{selectedAlbum.songs.length} 首歌曲</span>
+                    <span class="album-song-count"
+                      >{selectedAlbum.songs.length} 首歌曲</span
+                    >
                   </div>
                   <div class="controls album-hero-actions">
                     <motion.button
                       class="btn btn-primary"
                       onclick={handleAlbumDownload}
-                      disabled={downloadingAlbumCid === selectedAlbum.cid || !!findAlbumDownloadJob(selectedAlbum.cid)}
-                      animate={appButtonAnimate(true, downloadingAlbumCid === selectedAlbum.cid || !!findAlbumDownloadJob(selectedAlbum.cid))}
-                      whileHover={appButtonHover(true, downloadingAlbumCid === selectedAlbum.cid || !!findAlbumDownloadJob(selectedAlbum.cid))}
-                      whileTap={!prefersReducedMotion && !(downloadingAlbumCid === selectedAlbum.cid || !!findAlbumDownloadJob(selectedAlbum.cid)) ? { y: 0, scale: 0.98, opacity: 0.94 } : undefined}
+                      disabled={downloadingAlbumCid === selectedAlbum.cid ||
+                        !!findAlbumDownloadJob(selectedAlbum.cid)}
+                      animate={appButtonAnimate(
+                        true,
+                        downloadingAlbumCid === selectedAlbum.cid ||
+                          !!findAlbumDownloadJob(selectedAlbum.cid),
+                      )}
+                      whileHover={appButtonHover(
+                        true,
+                        downloadingAlbumCid === selectedAlbum.cid ||
+                          !!findAlbumDownloadJob(selectedAlbum.cid),
+                      )}
+                      whileTap={!prefersReducedMotion &&
+                      !(
+                        downloadingAlbumCid === selectedAlbum.cid ||
+                        !!findAlbumDownloadJob(selectedAlbum.cid)
+                      )
+                        ? { y: 0, scale: 0.98, opacity: 0.94 }
+                        : undefined}
                       transition={interactiveTransition}
                     >
                       {#if downloadingAlbumCid === selectedAlbum.cid}
@@ -2182,19 +2558,30 @@
                       onclick={toggleSelectionMode}
                       animate={appButtonAnimate(false, false)}
                       whileHover={appButtonHover(false, false)}
-                      whileTap={prefersReducedMotion ? undefined : { y: 0, scale: 0.98, opacity: 0.94 }}
+                      whileTap={prefersReducedMotion
+                        ? undefined
+                        : { y: 0, scale: 0.98, opacity: 0.94 }}
                       transition={interactiveTransition}
                     >
-                      {selectionModeEnabled ? '取消多选' : '多选下载'}
+                      {selectionModeEnabled ? "取消多选" : "多选下载"}
                     </motion.button>
                     {#if selectionModeEnabled}
                       <motion.button
                         class="btn btn-primary"
                         onclick={handleSelectionDownload}
                         disabled={isSelectionDownloadActionDisabled()}
-                        animate={appButtonAnimate(true, isSelectionDownloadActionDisabled())}
-                        whileHover={appButtonHover(true, isSelectionDownloadActionDisabled())}
-                        whileTap={!prefersReducedMotion && !isSelectionDownloadActionDisabled() ? { y: 0, scale: 0.98, opacity: 0.94 } : undefined}
+                        animate={appButtonAnimate(
+                          true,
+                          isSelectionDownloadActionDisabled(),
+                        )}
+                        whileHover={appButtonHover(
+                          true,
+                          isSelectionDownloadActionDisabled(),
+                        )}
+                        whileTap={!prefersReducedMotion &&
+                        !isSelectionDownloadActionDisabled()
+                          ? { y: 0, scale: 0.98, opacity: 0.94 }
+                          : undefined}
                         transition={interactiveTransition}
                       >
                         {#if isCurrentSelectionCreating()}
@@ -2205,15 +2592,17 @@
                           下载所选歌曲
                         {/if}
                       </motion.button>
-                      <span class="album-selection-summary">{selectedSongsLabel}</span>
+                      <span class="album-selection-summary"
+                        >{selectedSongsLabel}</span
+                      >
                     {/if}
                   </div>
                 </motion.div>
               </div>
               <motion.div
                 class="song-list"
-                initial={axisEnter('y', 10)}
-                animate={axisAnimate('y')}
+                initial={axisEnter("y", 10)}
+                animate={axisAnimate("y")}
                 exit={fadeExit()}
                 transition={motionTransition(LIST_DURATION, LIST_DELAY)}
               >
@@ -2221,9 +2610,12 @@
                   <SongRow
                     {song}
                     index={i}
-                    isPlaying={currentSong?.cid === song.cid && (isPlaying || isPaused)}
+                    isPlaying={currentSong?.cid === song.cid &&
+                      (isPlaying || isPaused)}
                     downloadState={getSongDownloadState(song.cid)}
-                    downloadDisabled={isSongDownloadInteractionBlocked(song.cid)}
+                    downloadDisabled={isSongDownloadInteractionBlocked(
+                      song.cid,
+                    )}
                     selectionMode={selectionModeEnabled}
                     isSelected={isSongSelected(song.cid)}
                     selectionDisabled={isCurrentSelectionCreating()}
@@ -2255,7 +2647,10 @@
             exit={fadeExit()}
             transition={motionTransition(CONTENT_MASK_DURATION)}
           >
-            <MotionSpinner className="content-loading-mask-spinner" reducedMotion={prefersReducedMotion} />
+            <MotionSpinner
+              className="content-loading-mask-spinner"
+              reducedMotion={prefersReducedMotion}
+            />
           </motion.div>
         {/if}
       </AnimatePresence>
@@ -2266,21 +2661,28 @@
         <motion.div
           key="player-dock"
           class="player-dock"
-          initial={axisEnter('y', 18)}
-          animate={axisAnimate('y')}
+          initial={axisEnter("y", 18)}
+          animate={axisAnimate("y")}
           exit={fadeExit()}
           transition={motionTransition(PLAYER_DOCK_DURATION)}
         >
-          <div class="player-dock-stack" data-panel={lyricsOpen ? 'lyrics' : playlistOpen ? 'playlist' : 'none'}>
+          <div
+            class="player-dock-stack"
+            data-panel={lyricsOpen
+              ? "lyrics"
+              : playlistOpen
+                ? "playlist"
+                : "none"}
+          >
             <AnimatePresence initial={false}>
               {#if lyricsOpen}
                 <motion.section
                   key="player-lyrics"
                   class="player-flyout"
                   data-panel="lyrics"
-                  initial={axisEnter('y', 12)}
-                  animate={axisAnimate('y')}
-                  exit={axisExit('y', 8)}
+                  initial={axisEnter("y", 12)}
+                  animate={axisAnimate("y")}
+                  exit={axisExit("y", 8)}
                   transition={motionTransition(0.18)}
                 >
                   <div class="player-flyout-header">
@@ -2288,7 +2690,11 @@
                       <p class="player-flyout-eyebrow">歌词</p>
                       <h3 class="player-flyout-title">{currentSong.name}</h3>
                     </div>
-                    <span class="player-flyout-count">{lyricsLines.length > 0 ? `${lyricsLines.length} 行` : '歌词'}</span>
+                    <span class="player-flyout-count"
+                      >{lyricsLines.length > 0
+                        ? `${lyricsLines.length} 行`
+                        : "歌词"}</span
+                    >
                   </div>
 
                   {#if lyricsLoading}
@@ -2298,7 +2704,11 @@
                   {:else if lyricsLines.length > 0}
                     <div class="player-lyrics-list">
                       {#each lyricsLines as line, index (line.id)}
-                        <p class={`player-lyric-line${index === activeLyricIndex ? ' active' : ''}`}>{line.text}</p>
+                        <p
+                          class={`player-lyric-line${index === activeLyricIndex ? " active" : ""}`}
+                        >
+                          {line.text}
+                        </p>
                       {/each}
                     </div>
                   {:else}
@@ -2310,9 +2720,9 @@
                   key="player-playlist"
                   class="player-flyout"
                   data-panel="playlist"
-                  initial={axisEnter('y', 12)}
-                  animate={axisAnimate('y')}
-                  exit={axisExit('y', 8)}
+                  initial={axisEnter("y", 12)}
+                  animate={axisAnimate("y")}
+                  exit={axisExit("y", 8)}
                   transition={motionTransition(0.18)}
                 >
                   <div class="player-flyout-header">
@@ -2320,7 +2730,9 @@
                       <p class="player-flyout-eyebrow">播放列表</p>
                       <h3 class="player-flyout-title">当前队列</h3>
                     </div>
-                    <span class="player-flyout-count">{playbackOrder.length} 首</span>
+                    <span class="player-flyout-count"
+                      >{playbackOrder.length} 首</span
+                    >
                   </div>
 
                   {#if playbackOrder.length > 0}
@@ -2328,50 +2740,66 @@
                       {#each playbackOrder as entry, index (entry.cid)}
                         <button
                           type="button"
-                          class={`player-playlist-item${entry.cid === currentSong?.cid ? ' active' : ''}`}
-                          onclick={() => { void playQueueEntry(entry, playbackOrder, index); }}
+                          class={`player-playlist-item${entry.cid === currentSong?.cid ? " active" : ""}`}
+                          onclick={() => {
+                            void playQueueEntry(entry, playbackOrder, index);
+                          }}
                         >
-                          <span class="player-playlist-index">{String(index + 1).padStart(2, '0')}</span>
+                          <span class="player-playlist-index"
+                            >{String(index + 1).padStart(2, "0")}</span
+                          >
                           <span class="player-playlist-meta">
-                            <span class="player-playlist-name">{entry.name}</span>
-                            <span class="player-playlist-artists">{entry.artists.join(' · ')}</span>
+                            <span class="player-playlist-name"
+                              >{entry.name}</span
+                            >
+                            <span class="player-playlist-artists"
+                              >{entry.artists.join(" · ")}</span
+                            >
                           </span>
                         </button>
                       {/each}
                     </div>
                   {:else}
-                    <div class="player-flyout-empty">当前没有可播放的队列。</div>
+                    <div class="player-flyout-empty">
+                      当前没有可播放的队列。
+                    </div>
                   {/if}
                 </motion.section>
               {/if}
             </AnimatePresence>
 
-          <AudioPlayer
-            song={currentSong}
-            {isPlaying}
-            {isPaused}
-            hasPrevious={playerHasPrevious}
-            hasNext={playerHasNext}
-            {progress}
-            {duration}
-            {isLoading}
-            isShuffled={shuffleEnabled}
-            {repeatMode}
-            lyricsActive={lyricsOpen}
-            playlistActive={playlistOpen}
-            downloadState={currentSong ? getSongDownloadState(currentSong.cid) : 'idle'}
-            downloadDisabled={currentSong ? isSongDownloadInteractionBlocked(currentSong.cid) : false}
-            reducedMotion={prefersReducedMotion}
-            onPrevious={handlePlayPrevious}
-            onTogglePlay={isPlaying ? handlePausePlayback : handleResumePlayback}
-            onSeek={handleSeekPlayback}
-            onNext={handlePlayNext}
-            onShuffleChange={handleShuffleChange}
-            onRepeatModeChange={handleRepeatModeChange}
-            onToggleLyrics={toggleLyricsPanel}
-            onTogglePlaylist={togglePlaylistPanel}
-            onDownload={handleCurrentSongDownload}
-          />
+            <AudioPlayer
+              song={currentSong}
+              {isPlaying}
+              {isPaused}
+              hasPrevious={playerHasPrevious}
+              hasNext={playerHasNext}
+              {progress}
+              {duration}
+              {isLoading}
+              isShuffled={shuffleEnabled}
+              {repeatMode}
+              lyricsActive={lyricsOpen}
+              playlistActive={playlistOpen}
+              downloadState={currentSong
+                ? getSongDownloadState(currentSong.cid)
+                : "idle"}
+              downloadDisabled={currentSong
+                ? isSongDownloadInteractionBlocked(currentSong.cid)
+                : false}
+              reducedMotion={prefersReducedMotion}
+              onPrevious={handlePlayPrevious}
+              onTogglePlay={isPlaying
+                ? handlePausePlayback
+                : handleResumePlayback}
+              onSeek={handleSeekPlayback}
+              onNext={handlePlayNext}
+              onShuffleChange={handleShuffleChange}
+              onRepeatModeChange={handleRepeatModeChange}
+              onToggleLyrics={toggleLyricsPanel}
+              onTogglePlaylist={togglePlaylistPanel}
+              onDownload={handleCurrentSongDownload}
+            />
           </div>
         </motion.div>
       {/if}
@@ -2386,8 +2814,8 @@
         class="settings-overlay"
         role="button"
         tabindex="-1"
-        onclick={() => settingsOpen = false}
-        onkeydown={(e) => e.key === 'Escape' && (settingsOpen = false)}
+        onclick={() => (settingsOpen = false)}
+        onkeydown={(e) => e.key === "Escape" && (settingsOpen = false)}
         initial={fadeEnter()}
         animate={{ opacity: 1 }}
         exit={fadeExit()}
@@ -2399,24 +2827,40 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
-        initial={axisEnter('x', 24)}
-        animate={axisAnimate('x')}
-        exit={axisExit('x', 18)}
+        initial={axisEnter("x", 24)}
+        animate={axisAnimate("x")}
+        exit={axisExit("x", 18)}
         transition={motionTransition(SHEET_DURATION)}
       >
         <div class="settings-header">
           <h2 class="settings-title" id="settings-title">下载设置</h2>
           <motion.button
             class="settings-close"
-            onclick={() => settingsOpen = false}
+            onclick={() => (settingsOpen = false)}
             aria-label="关闭"
             animate={settingsCloseAnimate()}
             whileHover={settingsCloseHover()}
-            whileTap={prefersReducedMotion ? undefined : { y: 0, scale: 0.96, opacity: 0.92 }}
+            whileTap={prefersReducedMotion
+              ? undefined
+              : { y: 0, scale: 0.96, opacity: 0.92 }}
             transition={interactiveTransition}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" /><line
+                x1="6"
+                y1="6"
+                x2="18"
+                y2="18"
+              />
             </svg>
           </motion.button>
         </div>
@@ -2427,11 +2871,23 @@
             id="format-select"
             class="form-select"
             bind:value={format}
-            use:motionStyles={{ animate: fieldMotion(isFormatHovered, isFormatFocused), transition: interactiveTransition, reducedMotion: prefersReducedMotion }}
-            onmouseenter={() => { isFormatHovered = true; }}
-            onmouseleave={() => { isFormatHovered = false; }}
-            onfocus={() => { isFormatFocused = true; }}
-            onblur={() => { isFormatFocused = false; }}
+            use:motionStyles={{
+              animate: fieldMotion(isFormatHovered, isFormatFocused),
+              transition: interactiveTransition,
+              reducedMotion: prefersReducedMotion,
+            }}
+            onmouseenter={() => {
+              isFormatHovered = true;
+            }}
+            onmouseleave={() => {
+              isFormatHovered = false;
+            }}
+            onfocus={() => {
+              isFormatFocused = true;
+            }}
+            onblur={() => {
+              isFormatFocused = false;
+            }}
           >
             <option value="flac">FLAC（无损压缩）</option>
             <option value="wav">WAV（无损）</option>
@@ -2447,11 +2903,23 @@
             class="form-input"
             readonly
             value={outputDir}
-            use:motionStyles={{ animate: fieldMotion(isOutputDirHovered, isOutputDirFocused), transition: interactiveTransition, reducedMotion: prefersReducedMotion }}
-            onmouseenter={() => { isOutputDirHovered = true; }}
-            onmouseleave={() => { isOutputDirHovered = false; }}
-            onfocus={() => { isOutputDirFocused = true; }}
-            onblur={() => { isOutputDirFocused = false; }}
+            use:motionStyles={{
+              animate: fieldMotion(isOutputDirHovered, isOutputDirFocused),
+              transition: interactiveTransition,
+              reducedMotion: prefersReducedMotion,
+            }}
+            onmouseenter={() => {
+              isOutputDirHovered = true;
+            }}
+            onmouseleave={() => {
+              isOutputDirHovered = false;
+            }}
+            onfocus={() => {
+              isOutputDirFocused = true;
+            }}
+            onblur={() => {
+              isOutputDirFocused = false;
+            }}
           />
           <motion.button
             class="btn"
@@ -2459,7 +2927,9 @@
             style="width: 100%; margin-top: 8px;"
             animate={appButtonAnimate(false, false)}
             whileHover={appButtonHover(false, false)}
-            whileTap={prefersReducedMotion ? undefined : { y: 0, scale: 0.98, opacity: 0.94 }}
+            whileTap={prefersReducedMotion
+              ? undefined
+              : { y: 0, scale: 0.98, opacity: 0.94 }}
             transition={interactiveTransition}
           >
             📁 选择文件夹
@@ -2470,7 +2940,9 @@
           <label class="settings-switch" for="download-lyrics">
             <span class="settings-switch-copy">
               <span class="form-label settings-switch-label">歌词文件</span>
-              <span class="form-help">有歌词时，在音频文件旁生成同名 `.lrc`。</span>
+              <span class="form-help"
+                >有歌词时，在音频文件旁生成同名 `.lrc`。</span
+              >
             </span>
             <span class="settings-switch-control">
               <input
@@ -2487,8 +2959,72 @@
         </div>
 
         <div class="form-group">
-          <div class="form-label">音频缓存</div>
-          <p class="form-help">播放时会边下边播，并把完整音频缓存到系统缓存目录。</p>
+          <div class="form-label">系统通知</div>
+          <p class="form-help">
+            桌面端权限由插件返回，不代表系统真实状态。请以打包后的 .app
+            验证通知行为。
+          </p>
+          <motion.button
+            class="btn"
+            onclick={handleSendTestNotification}
+            disabled={isSendingTestNotification}
+            style="width: 100%; justify-content: center; margin-top: 8px;"
+            animate={appButtonAnimate(false, isSendingTestNotification)}
+            whileHover={appButtonHover(false, isSendingTestNotification)}
+            whileTap={!prefersReducedMotion && !isSendingTestNotification
+              ? { y: 0, scale: 0.98, opacity: 0.94 }
+              : undefined}
+            transition={interactiveTransition}
+          >
+            {isSendingTestNotification ? "正在发送..." : "发送测试通知"}
+          </motion.button>
+        </div>
+
+        <div class="form-group">
+          <label class="settings-switch" for="notify-download">
+            <span class="settings-switch-copy">
+              <span class="form-label settings-switch-label">下载完成通知</span>
+              <span class="form-help">下载任务完成时显示系统通知。</span>
+            </span>
+            <span class="settings-switch-control">
+              <input
+                id="notify-download"
+                class="settings-switch-input"
+                type="checkbox"
+                bind:checked={notifyOnDownloadComplete}
+              />
+              <span class="settings-switch-track" aria-hidden="true">
+                <span class="settings-switch-thumb"></span>
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label class="settings-switch" for="notify-playback">
+            <span class="settings-switch-copy">
+              <span class="form-label settings-switch-label">播放切换通知</span>
+              <span class="form-help">播放新歌曲时显示系统通知。</span>
+            </span>
+            <span class="settings-switch-control">
+              <input
+                id="notify-playback"
+                class="settings-switch-input"
+                type="checkbox"
+                bind:checked={notifyOnPlaybackChange}
+              />
+              <span class="settings-switch-track" aria-hidden="true">
+                <span class="settings-switch-thumb"></span>
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <div class="form-label">音乐缓存</div>
+          <p class="form-help">
+            播放时会边下边播，并把完整音频缓存到系统缓存目录。
+          </p>
           <motion.button
             class="btn"
             onclick={handleClearAudioCache}
@@ -2496,10 +3032,12 @@
             style="width: 100%; justify-content: center; margin-top: 8px;"
             animate={appButtonAnimate(false, isClearingAudioCache)}
             whileHover={appButtonHover(false, isClearingAudioCache)}
-            whileTap={!prefersReducedMotion && !isClearingAudioCache ? { y: 0, scale: 0.98, opacity: 0.94 } : undefined}
+            whileTap={!prefersReducedMotion && !isClearingAudioCache
+              ? { y: 0, scale: 0.98, opacity: 0.94 }
+              : undefined}
             transition={interactiveTransition}
           >
-            {isClearingAudioCache ? '正在清除缓存...' : '清除音频缓存'}
+            {isClearingAudioCache ? "正在清除缓存..." : "清除音频缓存"}
           </motion.button>
         </div>
       </motion.div>
@@ -2514,8 +3052,8 @@
         class="settings-overlay"
         role="button"
         tabindex="-1"
-        onclick={() => downloadPanelOpen = false}
-        onkeydown={(e) => e.key === 'Escape' && (downloadPanelOpen = false)}
+        onclick={() => (downloadPanelOpen = false)}
+        onkeydown={(e) => e.key === "Escape" && (downloadPanelOpen = false)}
         initial={fadeEnter()}
         animate={{ opacity: 1 }}
         exit={fadeExit()}
@@ -2527,9 +3065,9 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="download-panel-title"
-        initial={axisEnter('x', 24)}
-        animate={axisAnimate('x')}
-        exit={axisExit('x', 18)}
+        initial={axisEnter("x", 24)}
+        animate={axisAnimate("x")}
+        exit={axisExit("x", 18)}
         transition={motionTransition(SHEET_DURATION)}
       >
         <div class="settings-header">
@@ -2541,22 +3079,40 @@
               disabled={!canClearDownloadHistory()}
               animate={appButtonAnimate(false, !canClearDownloadHistory())}
               whileHover={appButtonHover(false, !canClearDownloadHistory())}
-              whileTap={!prefersReducedMotion && canClearDownloadHistory() ? { y: 0, scale: 0.98, opacity: 0.94 } : undefined}
+              whileTap={!prefersReducedMotion && canClearDownloadHistory()
+                ? { y: 0, scale: 0.98, opacity: 0.94 }
+                : undefined}
               transition={interactiveTransition}
             >
               清理历史
             </motion.button>
             <motion.button
               class="settings-close"
-              onclick={() => downloadPanelOpen = false}
+              onclick={() => (downloadPanelOpen = false)}
               aria-label="关闭"
               animate={settingsCloseAnimate()}
               whileHover={settingsCloseHover()}
-              whileTap={prefersReducedMotion ? undefined : { y: 0, scale: 0.96, opacity: 0.92 }}
+              whileTap={prefersReducedMotion
+                ? undefined
+                : { y: 0, scale: 0.96, opacity: 0.92 }}
               transition={interactiveTransition}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" /><line
+                  x1="6"
+                  y1="6"
+                  x2="18"
+                  y2="18"
+                />
               </svg>
             </motion.button>
           </div>
@@ -2571,19 +3127,28 @@
               {@const kindLabel = getJobKindLabel(job)}
               {@const summaryLabel = getJobSummaryLabel(job)}
               {@const errorSummary = getJobErrorSummary(job)}
-              {@const isActive = job.status === 'running'}
-              <div class="download-job-card" class:is-active={isActive} class:is-done={job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'partiallyFailed'}>
+              {@const isActive = job.status === "running"}
+              <div
+                class="download-job-card"
+                class:is-active={isActive}
+                class:is-done={job.status === "completed" ||
+                  job.status === "failed" ||
+                  job.status === "cancelled" ||
+                  job.status === "partiallyFailed"}
+              >
                 <div class="download-job-header">
                   <div class="download-job-info">
                     <div class="download-job-meta-row">
                       <span class="download-job-kind">{kindLabel}</span>
-                      <span class="download-job-status" data-status={job.status}>{statusLabel}</span>
+                      <span class="download-job-status" data-status={job.status}
+                        >{statusLabel}</span
+                      >
                     </div>
                     <span class="download-job-title">{job.title}</span>
                     <span class="download-job-summary">{summaryLabel}</span>
                   </div>
                   <div class="download-job-actions">
-                    {#if job.status === 'running' || job.status === 'queued'}
+                    {#if job.status === "running" || job.status === "queued"}
                       <button
                         class="download-job-btn download-job-cancel"
                         onclick={() => handleCancelDownloadJob(job.id)}
@@ -2591,7 +3156,7 @@
                       >
                         ✕
                       </button>
-                    {:else if (job.status === 'failed' || job.status === 'partiallyFailed' || job.status === 'cancelled') && !isJobActive(job.id)}
+                    {:else if (job.status === "failed" || job.status === "partiallyFailed" || job.status === "cancelled") && !isJobActive(job.id)}
                       <button
                         class="download-job-btn download-job-retry"
                         onclick={() => handleRetryDownloadJob(job.id)}
@@ -2603,12 +3168,15 @@
                   </div>
                 </div>
 
-                {#if job.status === 'running'}
+                {#if job.status === "running"}
                   <div class="download-job-progress-bar">
-                    <div class="download-job-progress-fill" style="width: {progress * 100}%"></div>
+                    <div
+                      class="download-job-progress-fill"
+                      style="width: {progress * 100}%"
+                    ></div>
                   </div>
                   <p class="download-job-progress-text">{progressText}</p>
-                {:else if job.status === 'completed' || job.status === 'partiallyFailed' || job.status === 'failed' || job.status === 'cancelled'}
+                {:else if job.status === "completed" || job.status === "partiallyFailed" || job.status === "failed" || job.status === "cancelled"}
                   <p class="download-job-progress-text">{progressText}</p>
                 {/if}
 
@@ -2627,12 +3195,15 @@
                         {/if}
                       </div>
                       <div class="download-task-meta">
-                        <span class="download-task-status">{getTaskStatusLabel(task)}</span>
+                        <span class="download-task-status"
+                          >{getTaskStatusLabel(task)}</span
+                        >
                         <div class="download-task-actions">
                           {#if canCancelTask(task)}
                             <button
                               class="download-task-btn download-task-cancel"
-                              onclick={() => handleCancelDownloadTask(job.id, task.id)}
+                              onclick={() =>
+                                handleCancelDownloadTask(job.id, task.id)}
                               title="取消该任务"
                             >
                               取消
@@ -2640,7 +3211,8 @@
                           {:else if canRetryTask(task) && !isJobActive(job.id)}
                             <button
                               class="download-task-btn download-task-retry"
-                              onclick={() => handleRetryDownloadTask(job.id, task.id)}
+                              onclick={() =>
+                                handleRetryDownloadTask(job.id, task.id)}
                               title="重试该任务"
                             >
                               重试
@@ -2657,7 +3229,9 @@
         {:else}
           <div class="download-panel-empty">
             <p>暂无下载任务</p>
-            <p class="form-help">点击专辑页的“下载整张专辑”或曲目右侧下载按钮开始下载</p>
+            <p class="form-help">
+              点击专辑页的“下载整张专辑”或曲目右侧下载按钮开始下载
+            </p>
           </div>
         {/if}
       </motion.div>
