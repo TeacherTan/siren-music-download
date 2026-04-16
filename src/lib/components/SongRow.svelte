@@ -2,24 +2,77 @@
   import { motion } from '@humanspeak/svelte-motion';
   import type { SongEntry } from '$lib/types';
 
+  type SongDownloadState = 'idle' | 'creating' | 'queued' | 'running';
+
   interface Props {
     song: SongEntry;
     index: number;
     isPlaying?: boolean;
-    isDownloading?: boolean;
+    downloadState?: SongDownloadState;
+    downloadDisabled?: boolean;
+    selectionMode?: boolean;
+    isSelected?: boolean;
+    selectionDisabled?: boolean;
     reducedMotion?: boolean;
     onclick?: () => void;
     onDownload?: () => void;
+    onToggleSelection?: () => void;
   }
 
-  let { song, index, isPlaying = false, isDownloading = false, reducedMotion = false, onclick, onDownload }: Props = $props();
+  let {
+    song,
+    index,
+    isPlaying = false,
+    downloadState = 'idle',
+    downloadDisabled = false,
+    selectionMode = false,
+    isSelected = false,
+    selectionDisabled = false,
+    reducedMotion = false,
+    onclick,
+    onDownload,
+    onToggleSelection,
+  }: Props = $props();
 
   let isHovered = $state(false);
   let isFocused = $state(false);
 
-  const showEmphasis = $derived.by(() => isPlaying || isHovered || isFocused);
+  const showEmphasis = $derived.by(() => isPlaying || isHovered || isFocused || isSelected);
   const showPlayIndicator = $derived.by(() => isPlaying || isHovered || isFocused);
+  const isBusy = $derived.by(() => downloadState !== 'idle');
+  const isDownloadDisabled = $derived.by(() => isBusy || downloadDisabled || selectionMode);
+  const downloadButtonLabel = $derived.by(() => {
+    switch (downloadState) {
+      case 'creating':
+        return `正在创建 ${song.name} 的下载任务`;
+      case 'queued':
+        return `${song.name} 已在下载队列中`;
+      case 'running':
+        return `${song.name} 正在下载中`;
+      default:
+        return `下载 ${song.name}`;
+    }
+  });
+  const downloadButtonTitle = $derived.by(() => {
+    switch (downloadState) {
+      case 'creating':
+        return '正在创建任务...';
+      case 'queued':
+        return '已在队列中';
+      case 'running':
+        return '下载中';
+      default:
+        return '下载';
+    }
+  });
   const rowSurface = $derived.by(() => {
+    if (isSelected) {
+      return {
+        backgroundColor: 'rgba(var(--accent-rgb), 0.12)',
+        boxShadow: 'inset 0 0 0 1px rgba(var(--accent-rgb), 0.12)',
+      };
+    }
+
     if (isPlaying) {
       return {
         backgroundColor: 'rgba(var(--accent-rgb), 0.1)',
@@ -64,16 +117,27 @@
     duration: reducedMotion ? 0 : 0.16,
     ease: 'easeOut',
   } as const));
+
+  function handleRowActivate() {
+    if (selectionMode) {
+      if (!selectionDisabled) {
+        onToggleSelection?.();
+      }
+      return;
+    }
+
+    onclick?.();
+  }
 </script>
 
 <motion.div
-  class="song-row"
+  class={`song-row${selectionMode ? ' is-selection-mode' : ''}${isSelected ? ' is-selected' : ''}`}
   role="button"
   tabindex="0"
   animate={rowSurface}
   whileTap={reducedMotion ? undefined : { scale: 0.996 }}
   transition={motionTransition}
-  onclick={() => onclick?.()}
+  onclick={handleRowActivate}
   onmouseenter={() => { isHovered = true; }}
   onmouseleave={() => { isHovered = false; }}
   onfocusin={() => { isFocused = true; }}
@@ -81,10 +145,26 @@
   onkeydown={(e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      onclick?.();
+      handleRowActivate();
     }
   }}
 >
+  {#if selectionMode}
+    <button
+      type="button"
+      class="song-selection-toggle"
+      class:is-selected={isSelected}
+      disabled={selectionDisabled}
+      aria-label={isSelected ? `取消选择 ${song.name}` : `选择 ${song.name}`}
+      aria-pressed={isSelected}
+      onclick={(event) => {
+        event.stopPropagation();
+        onToggleSelection?.();
+      }}
+    >
+      <span class="song-selection-dot"></span>
+    </button>
+  {/if}
   <motion.div
     class="song-number"
     animate={{
@@ -134,13 +214,14 @@
     <motion.button
       type="button"
       class="download-button"
-      aria-label={`下载 ${song.name}`}
-      disabled={!onDownload || isDownloading}
+      aria-label={downloadButtonLabel}
+      title={downloadButtonTitle}
+      disabled={!onDownload || isDownloadDisabled}
       animate={{
-        opacity: isDownloading ? 0.68 : 1,
+        opacity: isDownloadDisabled ? 0.52 : isBusy ? 0.78 : 1,
         scale: 1,
-        backgroundColor: isDownloading ? 'rgba(var(--accent-rgb), 0.12)' : showEmphasis ? 'rgba(var(--accent-rgb), 0.08)' : 'rgba(15, 23, 42, 0.04)',
-        color: isDownloading ? 'var(--accent)' : showEmphasis ? 'var(--accent)' : 'var(--text-secondary)',
+        backgroundColor: isBusy ? 'rgba(var(--accent-rgb), 0.12)' : showEmphasis ? 'rgba(var(--accent-rgb), 0.08)' : 'rgba(15, 23, 42, 0.04)',
+        color: isBusy ? 'var(--accent)' : showEmphasis ? 'var(--accent)' : 'var(--text-secondary)',
       }}
       transition={motionTransition}
       onclick={(event) => {
@@ -148,7 +229,7 @@
         onDownload?.();
       }}
     >
-      {#if isDownloading}
+      {#if downloadState === 'creating'}
         <motion.svg
           width="15"
           height="15"
@@ -164,6 +245,19 @@
           <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
           <path d="M21 3v6h-6"></path>
         </motion.svg>
+      {:else if downloadState === 'queued'}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 7v5"></path>
+          <path d="m9.5 10.5 2.5 2.5 2.5-2.5"></path>
+          <path d="M5 18h14"></path>
+          <path d="M8 4.5h8"></path>
+        </svg>
+      {:else if downloadState === 'running'}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 5v9"></path>
+          <path d="m8.5 10.5 3.5 3.5 3.5-3.5"></path>
+          <path d="M5 18h14"></path>
+        </svg>
       {:else}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -190,6 +284,10 @@
     background: transparent;
   }
 
+  :global(.song-row.is-selection-mode) {
+    gap: 14px;
+  }
+
   :global(.song-row:focus-visible) {
     box-shadow:
       inset 0 0 0 1px rgba(var(--accent-rgb), 0.16),
@@ -214,6 +312,45 @@
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
+  }
+
+  .song-selection-toggle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--accent-rgb), 0.16);
+    background: rgba(15, 23, 42, 0.03);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+  }
+
+  .song-selection-toggle.is-selected {
+    background: rgba(var(--accent-rgb), 0.12);
+    border-color: rgba(var(--accent-rgb), 0.3);
+  }
+
+  .song-selection-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .song-selection-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px rgba(var(--accent-rgb), 0.4);
+    transition: background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  }
+
+  .song-selection-toggle.is-selected .song-selection-dot {
+    background: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+    transform: scale(1.02);
   }
 
   :global(.song-name) {

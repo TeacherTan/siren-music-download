@@ -1,5 +1,6 @@
 <script lang="ts">
   type RepeatMode = 'all' | 'one';
+  type SongDownloadState = 'idle' | 'creating' | 'queued' | 'running';
 
   interface Song {
     cid: string;
@@ -22,6 +23,8 @@
     repeatMode?: RepeatMode;
     lyricsActive?: boolean;
     playlistActive?: boolean;
+    downloadState?: SongDownloadState;
+    downloadDisabled?: boolean;
     onPrevious?: () => void;
     onTogglePlay?: () => void;
     onSeek?: (positionSecs: number) => void | Promise<void>;
@@ -47,6 +50,8 @@
     repeatMode = 'all',
     lyricsActive = false,
     playlistActive = false,
+    downloadState = 'idle',
+    downloadDisabled = false,
     onPrevious,
     onTogglePlay,
     onSeek,
@@ -95,6 +100,21 @@
   const detailPanel = $derived.by(() => (lyricsActive ? 'lyrics' : playlistActive ? 'playlist' : 'none'));
   const lyricsButtonLabel = $derived.by(() => (lyricsActive ? '关闭歌词' : '打开歌词'));
   const playlistButtonLabel = $derived.by(() => (playlistActive ? '关闭播放列表' : '打开播放列表'));
+  const downloadButtonLabel = $derived.by(() => {
+    if (!song) return '下载当前歌曲';
+
+    switch (downloadState) {
+      case 'creating':
+        return `正在创建 ${song.name} 的下载任务`;
+      case 'queued':
+        return `${song.name} 已在下载队列中`;
+      case 'running':
+        return `${song.name} 正在下载中`;
+      default:
+        return `下载 ${song.name}`;
+    }
+  });
+  const canDownload = $derived.by(() => !!song && !isLoading && !!onDownload && downloadState === 'idle' && !downloadDisabled);
   const remainingLabel = $derived.by(() => (duration > 0 ? `-${formatTime(remainingProgress)}` : '0:00'));
   const progressStyle = $derived.by(() => `--progress-ratio:${progressRatio};--motion-duration:${reducedMotion ? '0ms' : 'var(--motion-base)'}`);
 
@@ -334,15 +354,27 @@
       <button
         type="button"
         class="icon-button"
-        aria-label="下载当前歌曲"
-        disabled={!song || isLoading || !onDownload}
+        class:download-active={downloadState !== 'idle'}
+        aria-label={downloadButtonLabel}
+        title={downloadButtonLabel}
+        disabled={!canDownload}
         onclick={() => onDownload?.()}
       >
-        <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 5v9"></path>
-          <path d="m8.5 10.5 3.5 3.5 3.5-3.5"></path>
-          <path d="M5 18h14"></path>
-        </svg>
+        {#if downloadState === 'creating'}
+          <svg class="control-icon spin-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+            <path d="M21 3v6h-6"></path>
+          </svg>
+        {:else}
+          <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v9"></path>
+            <path d="m8.5 10.5 3.5 3.5 3.5-3.5"></path>
+            <path d="M5 18h14"></path>
+            {#if downloadState === 'queued'}
+              <path d="M8 4.5h8"></path>
+            {/if}
+          </svg>
+        {/if}
       </button>
     </div>
   </section>
@@ -854,6 +886,21 @@
       0 8px 18px rgba(var(--accent-rgb), 0.12);
   }
 
+  .icon-button.download-active {
+    background: var(--player-control-hover-bg);
+    color: var(--icon-active);
+    border-color: rgba(var(--accent-rgb), 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .icon-button.download-active::before {
+    opacity: 1;
+  }
+
+  .spin-icon {
+    animation: player-download-spin 0.9s linear infinite;
+  }
+
   .icon-button:active:not(:disabled) {
     transform: scale(0.96);
   }
@@ -920,6 +967,16 @@
   .icon-button:disabled {
     cursor: not-allowed;
     box-shadow: none;
+  }
+
+  @keyframes player-download-spin {
+    from {
+      transform: rotate(0deg);
+    }
+
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   @media (max-width: 900px) {

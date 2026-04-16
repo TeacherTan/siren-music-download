@@ -9,7 +9,9 @@
     getAlbums, getAlbumDetail, getDefaultOutputDir, selectDirectory,
     playSong, pausePlayback, resumePlayback,
     seekCurrentPlayback, getPlayerState, clearAudioCache, extractImageTheme,
-    getSongLyrics, downloadSong
+    getSongLyrics,
+    createDownloadJob, listDownloadJobs, cancelDownloadJob, cancelDownloadTask,
+    retryDownloadJob, retryDownloadTask, clearDownloadHistory,
   } from '$lib/api';
   import { clearCache } from '$lib/cache';
   import type {
@@ -20,6 +22,11 @@
     PlayerState,
     PlaybackContext,
     PlaybackQueueEntry,
+    DownloadJobSnapshot,
+    DownloadManagerSnapshot,
+    DownloadTaskProgressEvent,
+    CreateDownloadJobRequest,
+    DownloadTaskSnapshot,
   } from '$lib/types';
   import { applyThemePalette, DEFAULT_THEME_PALETTE } from '$lib/theme';
   import { motionStyles } from '$lib/actions/motionStyles';
@@ -50,6 +57,7 @@
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   type RepeatMode = 'all' | 'one';
+  type SongDownloadState = 'idle' | 'creating' | 'queued' | 'running';
 
   interface PlayerSong {
     cid: string;
@@ -94,6 +102,22 @@
   let lyricsLines = $state<LyricLine[]>([]);
   let lyricsSongCid = $state<string | null>(null);
   let downloadingSongCid = $state<string | null>(null);
+  let downloadingAlbumCid = $state<string | null>(null);
+  let creatingSelectionKey = $state<string | null>(null);
+  let selectedSongCids = $state<string[]>([]);
+  let selectionModeEnabled = $state(false);
+  // Download job system state
+  let downloadManager = $state<DownloadManagerSnapshot | null>(null);
+  let downloadPanelOpen = $state(false);
+  // Track current download speed for active tasks
+  let taskSpeedMap = $state<Map<string, number>>(new Map());
+
+  // Computed: number of active/queued/running jobs
+  let activeDownloadCount = $derived(
+    downloadManager
+      ? downloadManager.jobs.filter((j) => j.status === 'running' || j.status === 'queued').length
+      : 0
+  );
   // Track which song is currently being loaded to prevent duplicate play calls
   let playingCid = $state<string | null>(null);
   let albumRequestSeq = $state(0);
@@ -137,6 +161,13 @@
     }
 
     return activeIndex;
+  });
+
+  const selectedSongCount = $derived.by(() => selectedSongCids.length);
+  const selectedSongsLabel = $derived.by(() => {
+    if (selectedSongCount === 0) return '未选择歌曲';
+    if (selectedSongCount === 1) return '已选择 1 首';
+    return `已选择 ${selectedSongCount} 首`;
   });
 
   function setContentViewport(instance: OverlayScrollbars) {
@@ -506,12 +537,150 @@
     }
   }
 
+  function buildSelectionKey(songCids: string[]): string {
+    return [...songCids].sort().join(',');
+  }
+
+  function isSongSelected(songCid: string): boolean {
+    return selectedSongCids.includes(songCid);
+  }
+
+  function toggleSongSelection(songCid: string) {
+    if (selectedSongCids.includes(songCid)) {
+      selectedSongCids = selectedSongCids.filter((cid) => cid !== songCid);
+      return;
+    }
+
+    selectedSongCids = [...selectedSongCids, songCid];
+  }
+
+  function clearSongSelection() {
+    selectedSongCids = [];
+  }
+
+  function toggleSelectionMode() {
+    selectionModeEnabled = !selectionModeEnabled;
+    if (!selectionModeEnabled) {
+      clearSongSelection();
+    }
+  }
+
+  function hasCurrentDownloadOptions(job: DownloadJobSnapshot): boolean {
+    return job.options.outputDir === outputDir
+      && job.options.format === format
+      && job.options.downloadLyrics === downloadLyrics;
+  }
+
+  function findSelectionDownloadJob(songCids: string[]): DownloadJobSnapshot | null {
+    if (!downloadManager || songCids.length === 0) return null;
+
+    const targetKey = buildSelectionKey(songCids);
+    return downloadManager.jobs.find((job) => {
+      if (job.kind !== 'selection') return false;
+      if (job.status !== 'queued' && job.status !== 'running') return false;
+      if (!hasCurrentDownloadOptions(job)) return false;
+      return buildSelectionKey(job.tasks.map((task) => task.songCid)) === targetKey;
+    }) ?? null;
+  }
+
+  function getCurrentSelectionKey(): string | null {
+    return selectedSongCids.length > 0 ? buildSelectionKey(selectedSongCids) : null;
+  }
+
+  function isCurrentSelectionCreating(): boolean {
+    const selectionKey = getCurrentSelectionKey();
+    return selectionKey !== null && creatingSelectionKey === selectionKey;
+  }
+
+  function getCurrentSelectionJob(): DownloadJobSnapshot | null {
+    return findSelectionDownloadJob(selectedSongCids);
+  }
+
+  function isSelectionDownloadActionDisabled(): boolean {
+    return selectedSongCount === 0 || isCurrentSelectionCreating() || !!getCurrentSelectionJob();
+  }
+
+  function findAlbumDownloadJob(albumCid: string): DownloadJobSnapshot | null {
+    if (!downloadManager) return null;
+
+    return downloadManager.jobs.find((job) => {
+      if (job.kind !== 'album') return false;
+      const matchesAlbum = job.tasks.some((task) => task.albumCid === albumCid);
+      if (!matchesAlbum) return false;
+      return job.status === 'queued' || job.status === 'running';
+    }) ?? null;
+  }
+
+  function findSongDownloadTask(songCid: string): DownloadTaskSnapshot | null {
+    if (!downloadManager) return null;
+
+    for (const job of downloadManager.jobs) {
+      if (job.status !== 'queued' && job.status !== 'running') continue;
+      const task = job.tasks.find((candidate) => candidate.songCid === songCid);
+      if (task) return task;
+    }
+
+    return null;
+  }
+
+  function isSongDownloadInteractionBlocked(songCid: string): boolean {
+    return downloadingSongCid !== null && downloadingSongCid !== songCid;
+  }
+
+  function getSongDownloadState(songCid: string): SongDownloadState {
+    if (downloadingSongCid === songCid) {
+      return 'creating';
+    }
+
+    const task = findSongDownloadTask(songCid);
+    if (!task) {
+      return 'idle';
+    }
+
+    if (task.status === 'queued') {
+      return 'queued';
+    }
+
+    if (task.status === 'preparing' || task.status === 'downloading' || task.status === 'writing') {
+      return 'running';
+    }
+
+    return 'idle';
+  }
+
+  function getSongDownloadJob(songCid: string): DownloadJobSnapshot | null {
+    if (!downloadManager) return null;
+
+    return downloadManager.jobs.find((job) =>
+      (job.status === 'queued' || job.status === 'running')
+      && job.tasks.some((task) => task.songCid === songCid)
+    ) ?? null;
+  }
+
   async function performSongDownload(songCid: string) {
+    const existingJob = getSongDownloadJob(songCid);
+    if (existingJob) {
+      downloadPanelOpen = true;
+      return existingJob.id;
+    }
+
     if (downloadingSongCid) return null;
 
     downloadingSongCid = songCid;
     try {
-      return await downloadSong(songCid, outputDir, format, downloadLyrics);
+      const request: CreateDownloadJobRequest = {
+        kind: 'song',
+        songCids: [songCid],
+        albumCid: null,
+        options: {
+          outputDir,
+          format,
+          downloadLyrics,
+        },
+      };
+      const job = await createDownloadJob(request);
+      downloadPanelOpen = true;
+      return job.id;
     } finally {
       if (downloadingSongCid === songCid) {
         downloadingSongCid = null;
@@ -522,12 +691,115 @@
   async function handleCurrentSongDownload() {
     if (!currentSong) return;
     try {
-      const outputPath = await performSongDownload(currentSong.cid);
-      if (!outputPath) return;
-      alert(`已下载到：\n${outputPath}`);
+      const existingJob = getSongDownloadJob(currentSong.cid);
+      await performSongDownload(currentSong.cid);
+      if (existingJob) {
+        alert('这首歌的下载任务已在队列中或正在执行。');
+      }
     } catch (error) {
       console.error('[ERROR] Failed to download current song:', error);
       alert(`下载失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function performAlbumDownload(album: AlbumDetail) {
+    const existingJob = findAlbumDownloadJob(album.cid);
+    if (existingJob) {
+      downloadPanelOpen = true;
+      return existingJob.id;
+    }
+
+    if (downloadingAlbumCid === album.cid) {
+      return null;
+    }
+
+    downloadingAlbumCid = album.cid;
+    try {
+      const request: CreateDownloadJobRequest = {
+        kind: 'album',
+        songCids: [],
+        albumCid: album.cid,
+        options: {
+          outputDir,
+          format,
+          downloadLyrics,
+        },
+      };
+      const job = await createDownloadJob(request);
+      downloadPanelOpen = true;
+      return job.id;
+    } finally {
+      if (downloadingAlbumCid === album.cid) {
+        downloadingAlbumCid = null;
+      }
+    }
+  }
+
+  async function performSelectionDownload(songCids: string[]) {
+    if (songCids.length === 0) return null;
+
+    const existingJob = findSelectionDownloadJob(songCids);
+    if (existingJob) {
+      downloadPanelOpen = true;
+      return existingJob.id;
+    }
+
+    const selectionKey = buildSelectionKey(songCids);
+    if (creatingSelectionKey === selectionKey) {
+      return null;
+    }
+
+    creatingSelectionKey = selectionKey;
+    try {
+      const request: CreateDownloadJobRequest = {
+        kind: 'selection',
+        songCids,
+        albumCid: null,
+        options: {
+          outputDir,
+          format,
+          downloadLyrics,
+        },
+      };
+      const job = await createDownloadJob(request);
+      downloadPanelOpen = true;
+      clearSongSelection();
+      selectionModeEnabled = false;
+      return job.id;
+    } finally {
+      if (creatingSelectionKey === selectionKey) {
+        creatingSelectionKey = null;
+      }
+    }
+  }
+
+  async function handleAlbumDownload() {
+    if (!selectedAlbum) return;
+
+    try {
+      const existingJob = findAlbumDownloadJob(selectedAlbum.cid);
+      await performAlbumDownload(selectedAlbum);
+      if (existingJob) {
+        alert('这张专辑的下载任务已在队列中或正在执行。');
+      }
+    } catch (error) {
+      console.error('[ERROR] Failed to download album:', error);
+      alert(`整专下载失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function handleSelectionDownload() {
+    if (!selectedAlbum || selectedSongCids.length === 0) return;
+
+    try {
+      const existingJob = findSelectionDownloadJob(selectedSongCids);
+      await performSelectionDownload(selectedSongCids);
+      if (existingJob) {
+        alert('这组歌曲的下载任务已在队列中或正在执行。');
+      }
+    } catch (error) {
+      console.error('[ERROR] Failed to create selection download job:', error);
+      alert(`批量下载失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -893,6 +1165,9 @@
 
     let unlistenState: (() => void) | null = null;
     let unlistenProgress: (() => void) | null = null;
+    let unlistenDownloadManager: (() => void) | null = null;
+    let unlistenDownloadJob: (() => void) | null = null;
+    let unlistenDownloadProgress: (() => void) | null = null;
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     function updateReducedMotionPreference() {
@@ -945,6 +1220,57 @@
         duration = state.duration;
       });
 
+      // Subscribe to download events
+      unlistenDownloadManager = await listen<DownloadManagerSnapshot>(
+        'download-manager-state-changed',
+        (event) => {
+          downloadManager = event.payload;
+        },
+      );
+
+      unlistenDownloadJob = await listen<DownloadJobSnapshot>(
+        'download-job-updated',
+        (event) => {
+          const job = event.payload;
+          if (!downloadManager) return;
+          const jobs = downloadManager.jobs.map((j) => (j.id === job.id ? job : j));
+          downloadManager = { ...downloadManager, jobs };
+        },
+      );
+
+      unlistenDownloadProgress = await listen<DownloadTaskProgressEvent>(
+        'download-task-progress',
+        (event) => {
+          // Progress events update individual tasks in the manager state.
+          // The job-updated event carries the full snapshot, so we just
+          // need to update the task's bytes fields in-place.
+          if (!downloadManager) return;
+          const progress = event.payload;
+
+          // Update speed map
+          taskSpeedMap.set(progress.taskId, progress.speedBytesPerSec);
+
+          const jobIdx = downloadManager.jobs.findIndex((j) => j.id === progress.jobId);
+          if (jobIdx < 0) return;
+          const job = downloadManager.jobs[jobIdx];
+          const taskIdx = job.tasks.findIndex((t) => t.id === progress.taskId);
+          if (taskIdx < 0) return;
+          const updatedTasks = [...job.tasks];
+          updatedTasks[taskIdx] = { ...updatedTasks[taskIdx], ...progress };
+          const updatedJob = { ...job, tasks: updatedTasks };
+          const updatedJobs = [...downloadManager.jobs];
+          updatedJobs[jobIdx] = updatedJob;
+          downloadManager = { ...downloadManager, jobs: updatedJobs };
+        },
+      );
+
+      // Initialize download manager state
+      try {
+        downloadManager = await listDownloadJobs();
+      } catch {
+        // Download manager not available
+      }
+
       try {
         syncPlayerState(await getPlayerState());
       } catch {
@@ -965,6 +1291,9 @@
       }
       unlistenState?.();
       unlistenProgress?.();
+      unlistenDownloadManager?.();
+      unlistenDownloadJob?.();
+      unlistenDownloadProgress?.();
       mediaQuery.removeEventListener('change', updateReducedMotionPreference);
       window.removeEventListener('resize', handleWindowResize);
     };
@@ -1020,6 +1349,9 @@
     if (album.cid === selectedAlbumCid && !loadingDetail) {
       return;
     }
+
+    clearSongSelection();
+    selectionModeEnabled = false;
 
     const requestSeq = ++albumRequestSeq;
     selectedAlbumCid = album.cid;
@@ -1141,11 +1473,315 @@
     }
   }
 
+  // Download job helper functions
+  function getActiveDownloadJob(): DownloadJobSnapshot | null {
+    if (!downloadManager) return null;
+    if (downloadManager.activeJobId) {
+      return downloadManager.jobs.find((j) => j.id === downloadManager.activeJobId) ?? null;
+    }
+    // Fallback: find first running job
+    return downloadManager.jobs.find((j) => j.status === 'running') ?? null;
+  }
+
+  function formatByteSize(bytes: number | null | undefined): string {
+    if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) {
+      return '未知大小';
+    }
+
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let value = bytes;
+    let unitIndex = -1;
+
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+
+    const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+    return `${value.toFixed(precision)} ${units[unitIndex]}`;
+  }
+
+  function formatSpeed(bytesPerSec: number): string {
+    if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`;
+    const units = ['KB/s', 'MB/s', 'GB/s'];
+    let value = bytesPerSec;
+    let unitIndex = -1;
+
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+
+    const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+    return `${value.toFixed(precision)} ${units[unitIndex]}`;
+  }
+
+  function getTaskProgressLabel(task: DownloadTaskSnapshot): string | null {
+    if (task.status !== 'downloading' && task.status !== 'writing') {
+      return null;
+    }
+
+    if (task.status === 'downloading' && task.bytesTotal && task.bytesTotal > 0) {
+      const percent = Math.min(Math.round(task.bytesDone / task.bytesTotal * 100), 100);
+      const speed = taskSpeedMap.get(task.id);
+      const speedText = speed && speed > 0 ? ` · ${formatSpeed(speed)}` : '';
+      return `${formatByteSize(task.bytesDone)} / ${formatByteSize(task.bytesTotal)} · ${percent}%${speedText}`;
+    }
+
+    if (task.bytesDone > 0) {
+      return `${formatByteSize(task.bytesDone)} 已处理`;
+    }
+
+    return task.status === 'writing' ? '正在整理文件...' : '正在接收数据...';
+  }
+
+  function getTaskErrorLabel(task: DownloadTaskSnapshot): string | null {
+    if (!task.error) return null;
+
+    if (task.error.details && task.error.details !== task.error.message) {
+      return `${task.error.message} · ${task.error.details}`;
+    }
+
+    return task.error.message;
+  }
+
+  function getJobErrorSummary(job: DownloadJobSnapshot): string | null {
+    const firstFailedTask = job.tasks.find((task) => task.status === 'failed' && task.error);
+    if (firstFailedTask) {
+      return getTaskErrorLabel(firstFailedTask);
+    }
+
+    const firstCancelledTask = job.tasks.find((task) => task.status === 'cancelled' && task.error);
+    if (firstCancelledTask) {
+      return getTaskErrorLabel(firstCancelledTask);
+    }
+
+    if (!job.error) return null;
+
+    if (job.error.details && job.error.details !== job.error.message) {
+      return `${job.error.message} · ${job.error.details}`;
+    }
+
+    return job.error.message;
+  }
+
+  function getJobProgressText(job: DownloadJobSnapshot): string {
+    const terminalCount = job.completedTaskCount + job.failedTaskCount + job.cancelledTaskCount;
+    const activeTask = job.tasks.find((task) =>
+      task.status === 'preparing' || task.status === 'downloading' || task.status === 'writing'
+    );
+
+    const base = `${terminalCount}/${job.taskCount} 首已结束`;
+    if (!activeTask) {
+      return base;
+    }
+
+    const progressLabel = getTaskProgressLabel(activeTask);
+    if (!progressLabel) {
+      return `${base} · 正在处理 ${activeTask.songName}`;
+    }
+
+    return `${base} · ${activeTask.songName} · ${progressLabel}`;
+  }
+
+  function getJobProgress(job: DownloadJobSnapshot): number {
+    if (job.taskCount === 0) return 0;
+
+    const terminalCount = job.completedTaskCount + job.failedTaskCount + job.cancelledTaskCount;
+    const activeTask = job.tasks.find((task) =>
+      task.status === 'preparing' || task.status === 'downloading' || task.status === 'writing'
+    );
+
+    if (!activeTask) {
+      return terminalCount / job.taskCount;
+    }
+
+    const activeTaskProgress = activeTask.status === 'downloading' && activeTask.bytesTotal
+      ? activeTask.bytesDone / activeTask.bytesTotal
+      : activeTask.status === 'writing'
+        ? 1
+        : 0;
+
+    return Math.min((terminalCount + activeTaskProgress) / job.taskCount, 1);
+  }
+
+  function getJobStatusLabel(job: DownloadJobSnapshot): string {
+    switch (job.status) {
+      case 'queued':
+        return '排队中';
+      case 'running': {
+        const activeTask = job.tasks.find((task) =>
+          task.status === 'preparing' || task.status === 'downloading' || task.status === 'writing'
+        );
+        const currentIndex = activeTask ? activeTask.songIndex + 1 : job.completedTaskCount;
+        return `下载中 (${currentIndex}/${job.taskCount})`;
+      }
+      case 'completed':
+        return '已完成';
+      case 'partiallyFailed':
+        return `部分失败 (${job.failedTaskCount}/${job.taskCount})`;
+      case 'failed':
+        return '失败';
+      case 'cancelled':
+        return '已取消';
+      default:
+        return job.status;
+    }
+  }
+
+  function getTaskStatusLabel(task: DownloadTaskSnapshot): string {
+    switch (task.status) {
+      case 'queued':
+        return '排队中';
+      case 'preparing':
+        return '准备中';
+      case 'downloading': {
+        const progressLabel = getTaskProgressLabel(task);
+        return progressLabel ?? '下载中...';
+      }
+      case 'writing': {
+        const progressLabel = getTaskProgressLabel(task);
+        return progressLabel ? `写入中 · ${progressLabel}` : '写入中';
+      }
+      case 'completed':
+        return '已完成';
+      case 'failed':
+        return '失败';
+      case 'cancelled':
+        return '已取消';
+      default:
+        return task.status;
+    }
+  }
+
+  function getJobKindLabel(job: DownloadJobSnapshot): string {
+    switch (job.kind) {
+      case 'song':
+        return '单曲下载';
+      case 'album':
+        return '整专下载';
+      case 'selection':
+        return '多选下载';
+      default:
+        return job.kind;
+    }
+  }
+
+  function getSelectionJobAlbumCount(job: DownloadJobSnapshot): number {
+    return new Set(job.tasks.map((task) => task.albumCid)).size;
+  }
+
+  function getSelectionJobScopeLabel(job: DownloadJobSnapshot): string {
+    const albumCount = getSelectionJobAlbumCount(job);
+    if (albumCount <= 1) {
+      const albumName = job.tasks[0]?.albumName;
+      return albumName ? `来自《${albumName}》` : '来自同一张专辑';
+    }
+
+    return `跨 ${albumCount} 张专辑`;
+  }
+
+  function getJobSummaryLabel(job: DownloadJobSnapshot): string {
+    switch (job.kind) {
+      case 'song': {
+        const task = job.tasks[0];
+        return task?.albumName ? `来自《${task.albumName}》` : '单曲任务';
+      }
+      case 'album':
+        return `${job.taskCount} 首歌曲`;
+      case 'selection': {
+        if (job.taskCount <= 1) {
+          return getSelectionJobScopeLabel(job);
+        }
+
+        const albumCount = getSelectionJobAlbumCount(job);
+        if (albumCount <= 1) {
+          return `${job.taskCount} 首歌曲`;
+        }
+
+        return `${job.taskCount} 首歌曲 · 跨 ${albumCount} 张专辑`;
+      }
+      default:
+        return `${job.taskCount} 首歌曲`;
+    }
+  }
+
+  function isJobActive(jobId: string): boolean {
+    return downloadManager?.activeJobId === jobId;
+  }
+
+  function canCancelTask(task: DownloadTaskSnapshot): boolean {
+    return task.status === 'queued'
+      || task.status === 'preparing'
+      || task.status === 'downloading'
+      || task.status === 'writing';
+  }
+
+  function canRetryTask(task: DownloadTaskSnapshot): boolean {
+    return task.status === 'failed' || task.status === 'cancelled';
+  }
+
+  function canClearDownloadHistory(): boolean {
+    return !!downloadManager?.jobs.some((job) =>
+      job.status === 'completed'
+        || job.status === 'failed'
+        || job.status === 'cancelled'
+        || job.status === 'partiallyFailed'
+    );
+  }
+
+  async function handleCancelDownloadJob(jobId: string) {
+    try {
+      await cancelDownloadJob(jobId);
+    } catch (e) {
+      console.error('[ERROR] Failed to cancel download job:', e);
+    }
+  }
+
+  async function handleCancelDownloadTask(jobId: string, taskId: string) {
+    try {
+      await cancelDownloadTask(jobId, taskId);
+    } catch (e) {
+      console.error('[ERROR] Failed to cancel download task:', e);
+    }
+  }
+
+  async function handleRetryDownloadJob(jobId: string) {
+    try {
+      await retryDownloadJob(jobId);
+    } catch (e) {
+      console.error('[ERROR] Failed to retry download job:', e);
+    }
+  }
+
+  async function handleRetryDownloadTask(jobId: string, taskId: string) {
+    try {
+      await retryDownloadTask(jobId, taskId);
+    } catch (e) {
+      console.error('[ERROR] Failed to retry download task:', e);
+    }
+  }
+
+  async function handleClearDownloadHistory() {
+    try {
+      const removed = await clearDownloadHistory();
+      if (removed === 0) {
+        alert('当前没有可清理的下载历史。');
+      }
+    } catch (e) {
+      console.error('[ERROR] Failed to clear download history:', e);
+      alert(`清理下载历史失败：${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   async function handleSongDownload(song: SongEntry) {
     try {
-      const outputPath = await performSongDownload(song.cid);
-      if (!outputPath) return;
-      alert(`已下载到：\n${outputPath}`);
+      const existingJob = getSongDownloadJob(song.cid);
+      await performSongDownload(song.cid);
+      if (existingJob) {
+        alert('这首歌的下载任务已在队列中或正在执行。');
+      }
     } catch (error) {
       console.error('[ERROR] Failed to download song:', error);
       alert(`下载失败：${error instanceof Error ? error.message : String(error)}`);
@@ -1226,6 +1862,9 @@
     if (isRefreshing) return;
     isRefreshing = true;
     const requestSeq = ++albumRequestSeq;
+
+    clearSongSelection();
+    selectionModeEnabled = false;
 
     // Clear cache
     clearCache();
@@ -1333,9 +1972,38 @@
           </motion.svg>
         </motion.button>
 
+        <!-- Download panel button -->
+        <motion.button
+          class={`toolbar-icon-btn${downloadPanelOpen ? ' active' : ''}`}
+          onclick={() => {
+            downloadPanelOpen = !downloadPanelOpen;
+            if (downloadPanelOpen) settingsOpen = false;
+          }}
+          aria-label="下载任务"
+          aria-pressed={downloadPanelOpen}
+          title="下载任务"
+          animate={toolbarButtonAnimate(downloadPanelOpen, false, false)}
+          whileHover={toolbarButtonHover(false)}
+          whileTap={prefersReducedMotion ? undefined : { y: 0, scale: 0.96, opacity: 0.92 }}
+          transition={interactiveTransition}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12"/>
+            <path d="m8 11 4 4 4-4"/>
+            <path d="M20 17H4"/>
+            <path d="M20 21H4"/>
+          </svg>
+          {#if activeDownloadCount > 0}
+            <span class="toolbar-badge">{activeDownloadCount}</span>
+          {/if}
+        </motion.button>
+
         <motion.button
           class={`toolbar-icon-btn${settingsOpen ? ' active' : ''}`}
-          onclick={() => settingsOpen = !settingsOpen}
+          onclick={() => {
+            settingsOpen = !settingsOpen;
+            if (settingsOpen) downloadPanelOpen = false;
+          }}
           aria-label="下载设置"
           aria-pressed={settingsOpen}
           title="下载设置"
@@ -1491,6 +2159,55 @@
                   <div class="album-hero-meta">
                     <span class="album-song-count">{selectedAlbum.songs.length} 首歌曲</span>
                   </div>
+                  <div class="controls album-hero-actions">
+                    <motion.button
+                      class="btn btn-primary"
+                      onclick={handleAlbumDownload}
+                      disabled={downloadingAlbumCid === selectedAlbum.cid || !!findAlbumDownloadJob(selectedAlbum.cid)}
+                      animate={appButtonAnimate(true, downloadingAlbumCid === selectedAlbum.cid || !!findAlbumDownloadJob(selectedAlbum.cid))}
+                      whileHover={appButtonHover(true, downloadingAlbumCid === selectedAlbum.cid || !!findAlbumDownloadJob(selectedAlbum.cid))}
+                      whileTap={!prefersReducedMotion && !(downloadingAlbumCid === selectedAlbum.cid || !!findAlbumDownloadJob(selectedAlbum.cid)) ? { y: 0, scale: 0.98, opacity: 0.94 } : undefined}
+                      transition={interactiveTransition}
+                    >
+                      {#if downloadingAlbumCid === selectedAlbum.cid}
+                        正在创建任务...
+                      {:else if findAlbumDownloadJob(selectedAlbum.cid)}
+                        已在队列中
+                      {:else}
+                        下载整张专辑
+                      {/if}
+                    </motion.button>
+                    <motion.button
+                      class="btn"
+                      onclick={toggleSelectionMode}
+                      animate={appButtonAnimate(false, false)}
+                      whileHover={appButtonHover(false, false)}
+                      whileTap={prefersReducedMotion ? undefined : { y: 0, scale: 0.98, opacity: 0.94 }}
+                      transition={interactiveTransition}
+                    >
+                      {selectionModeEnabled ? '取消多选' : '多选下载'}
+                    </motion.button>
+                    {#if selectionModeEnabled}
+                      <motion.button
+                        class="btn btn-primary"
+                        onclick={handleSelectionDownload}
+                        disabled={isSelectionDownloadActionDisabled()}
+                        animate={appButtonAnimate(true, isSelectionDownloadActionDisabled())}
+                        whileHover={appButtonHover(true, isSelectionDownloadActionDisabled())}
+                        whileTap={!prefersReducedMotion && !isSelectionDownloadActionDisabled() ? { y: 0, scale: 0.98, opacity: 0.94 } : undefined}
+                        transition={interactiveTransition}
+                      >
+                        {#if isCurrentSelectionCreating()}
+                          正在创建批量任务...
+                        {:else if getCurrentSelectionJob()}
+                          已在队列中
+                        {:else}
+                          下载所选歌曲
+                        {/if}
+                      </motion.button>
+                      <span class="album-selection-summary">{selectedSongsLabel}</span>
+                    {/if}
+                  </div>
                 </motion.div>
               </div>
               <motion.div
@@ -1505,10 +2222,15 @@
                     {song}
                     index={i}
                     isPlaying={currentSong?.cid === song.cid && (isPlaying || isPaused)}
-                    isDownloading={downloadingSongCid === song.cid}
+                    downloadState={getSongDownloadState(song.cid)}
+                    downloadDisabled={isSongDownloadInteractionBlocked(song.cid)}
+                    selectionMode={selectionModeEnabled}
+                    isSelected={isSongSelected(song.cid)}
+                    selectionDisabled={isCurrentSelectionCreating()}
                     reducedMotion={prefersReducedMotion}
                     onclick={() => handlePlay(song)}
                     onDownload={() => handleSongDownload(song)}
+                    onToggleSelection={() => toggleSongSelection(song.cid)}
                   />
                 {/each}
               </motion.div>
@@ -1637,6 +2359,8 @@
             {repeatMode}
             lyricsActive={lyricsOpen}
             playlistActive={playlistOpen}
+            downloadState={currentSong ? getSongDownloadState(currentSong.cid) : 'idle'}
+            downloadDisabled={currentSong ? isSongDownloadInteractionBlocked(currentSong.cid) : false}
             reducedMotion={prefersReducedMotion}
             onPrevious={handlePlayPrevious}
             onTogglePlay={isPlaying ? handlePausePlayback : handleResumePlayback}
@@ -1778,6 +2502,164 @@
             {isClearingAudioCache ? '正在清除缓存...' : '清除音频缓存'}
           </motion.button>
         </div>
+      </motion.div>
+    {/if}
+  </AnimatePresence>
+
+  <!-- Download tasks panel (independent slide-in from right) -->
+  <AnimatePresence>
+    {#if downloadPanelOpen}
+      <motion.div
+        key="download-overlay"
+        class="settings-overlay"
+        role="button"
+        tabindex="-1"
+        onclick={() => downloadPanelOpen = false}
+        onkeydown={(e) => e.key === 'Escape' && (downloadPanelOpen = false)}
+        initial={fadeEnter()}
+        animate={{ opacity: 1 }}
+        exit={fadeExit()}
+        transition={motionTransition(OVERLAY_DURATION)}
+      ></motion.div>
+      <motion.div
+        key="download-panel"
+        class="download-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="download-panel-title"
+        initial={axisEnter('x', 24)}
+        animate={axisAnimate('x')}
+        exit={axisExit('x', 18)}
+        transition={motionTransition(SHEET_DURATION)}
+      >
+        <div class="settings-header">
+          <h2 class="settings-title" id="download-panel-title">下载任务</h2>
+          <div class="download-panel-header-actions">
+            <motion.button
+              class="download-panel-clear"
+              onclick={handleClearDownloadHistory}
+              disabled={!canClearDownloadHistory()}
+              animate={appButtonAnimate(false, !canClearDownloadHistory())}
+              whileHover={appButtonHover(false, !canClearDownloadHistory())}
+              whileTap={!prefersReducedMotion && canClearDownloadHistory() ? { y: 0, scale: 0.98, opacity: 0.94 } : undefined}
+              transition={interactiveTransition}
+            >
+              清理历史
+            </motion.button>
+            <motion.button
+              class="settings-close"
+              onclick={() => downloadPanelOpen = false}
+              aria-label="关闭"
+              animate={settingsCloseAnimate()}
+              whileHover={settingsCloseHover()}
+              whileTap={prefersReducedMotion ? undefined : { y: 0, scale: 0.96, opacity: 0.92 }}
+              transition={interactiveTransition}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </motion.button>
+          </div>
+        </div>
+
+        {#if downloadManager && downloadManager.jobs.length > 0}
+          <div class="download-jobs-list">
+            {#each [...downloadManager.jobs].reverse() as job (job.id)}
+              {@const progress = getJobProgress(job)}
+              {@const progressText = getJobProgressText(job)}
+              {@const statusLabel = getJobStatusLabel(job)}
+              {@const kindLabel = getJobKindLabel(job)}
+              {@const summaryLabel = getJobSummaryLabel(job)}
+              {@const errorSummary = getJobErrorSummary(job)}
+              {@const isActive = job.status === 'running'}
+              <div class="download-job-card" class:is-active={isActive} class:is-done={job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'partiallyFailed'}>
+                <div class="download-job-header">
+                  <div class="download-job-info">
+                    <div class="download-job-meta-row">
+                      <span class="download-job-kind">{kindLabel}</span>
+                      <span class="download-job-status" data-status={job.status}>{statusLabel}</span>
+                    </div>
+                    <span class="download-job-title">{job.title}</span>
+                    <span class="download-job-summary">{summaryLabel}</span>
+                  </div>
+                  <div class="download-job-actions">
+                    {#if job.status === 'running' || job.status === 'queued'}
+                      <button
+                        class="download-job-btn download-job-cancel"
+                        onclick={() => handleCancelDownloadJob(job.id)}
+                        title="取消"
+                      >
+                        ✕
+                      </button>
+                    {:else if (job.status === 'failed' || job.status === 'partiallyFailed' || job.status === 'cancelled') && !isJobActive(job.id)}
+                      <button
+                        class="download-job-btn download-job-retry"
+                        onclick={() => handleRetryDownloadJob(job.id)}
+                        title="重试"
+                      >
+                        ↻
+                      </button>
+                    {/if}
+                  </div>
+                </div>
+
+                {#if job.status === 'running'}
+                  <div class="download-job-progress-bar">
+                    <div class="download-job-progress-fill" style="width: {progress * 100}%"></div>
+                  </div>
+                  <p class="download-job-progress-text">{progressText}</p>
+                {:else if job.status === 'completed' || job.status === 'partiallyFailed' || job.status === 'failed' || job.status === 'cancelled'}
+                  <p class="download-job-progress-text">{progressText}</p>
+                {/if}
+
+                {#if errorSummary}
+                  <p class="download-job-error">{errorSummary}</p>
+                {/if}
+
+                <div class="download-job-tasks">
+                  {#each job.tasks as task (task.id)}
+                    {@const taskError = getTaskErrorLabel(task)}
+                    <div class="download-task-row" data-status={task.status}>
+                      <div class="download-task-copy">
+                        <span class="download-task-name">{task.songName}</span>
+                        {#if taskError}
+                          <span class="download-task-error">{taskError}</span>
+                        {/if}
+                      </div>
+                      <div class="download-task-meta">
+                        <span class="download-task-status">{getTaskStatusLabel(task)}</span>
+                        <div class="download-task-actions">
+                          {#if canCancelTask(task)}
+                            <button
+                              class="download-task-btn download-task-cancel"
+                              onclick={() => handleCancelDownloadTask(job.id, task.id)}
+                              title="取消该任务"
+                            >
+                              取消
+                            </button>
+                          {:else if canRetryTask(task) && !isJobActive(job.id)}
+                            <button
+                              class="download-task-btn download-task-retry"
+                              onclick={() => handleRetryDownloadTask(job.id, task.id)}
+                              title="重试该任务"
+                            >
+                              重试
+                            </button>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="download-panel-empty">
+            <p>暂无下载任务</p>
+            <p class="form-help">点击专辑页的“下载整张专辑”或曲目右侧下载按钮开始下载</p>
+          </div>
+        {/if}
       </motion.div>
     {/if}
   </AnimatePresence>

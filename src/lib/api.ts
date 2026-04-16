@@ -1,7 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { getCached, setCached } from './cache';
-import type { Album, AlbumDetail, SongDetail, ThemePalette, PlayerState, PlaybackContext } from './types';
+import type {
+  Album, AlbumDetail, SongDetail, ThemePalette, PlayerState, PlaybackContext,
+  CreateDownloadJobRequest, DownloadJobSnapshot, DownloadManagerSnapshot,
+} from './types';
 import type { OutputFormat } from './types';
 
 // Cache key prefixes for different API endpoints
@@ -184,4 +187,67 @@ export async function extractImageTheme(imageUrl: string): Promise<ThemePalette>
   const data = await invoke<ThemePalette>('extract_image_theme', { imageUrl });
   setCached(cacheKey, data);
   return data;
+}
+
+// ---------------------------------------------------------------------------
+// Download job API (mirrors commands in src-tauri/src/commands/downloads.rs)
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a new download job (song, album, or selection).
+ * The job is queued and executed asynchronously; subscribe to
+ * download-task-progress / download-job-updated events for progress updates.
+ */
+export async function createDownloadJob(request: CreateDownloadJobRequest): Promise<DownloadJobSnapshot> {
+  return invoke('create_download_job', { request });
+}
+
+/**
+ * List all download jobs with their current state.
+ */
+export async function listDownloadJobs(): Promise<DownloadManagerSnapshot> {
+  return invoke('list_download_jobs');
+}
+
+/**
+ * Get a specific download job by ID.
+ */
+export async function getDownloadJob(jobId: string): Promise<DownloadJobSnapshot | null> {
+  return invoke('get_download_job', { jobId });
+}
+
+/**
+ * Cancel an entire download job.
+ */
+export async function cancelDownloadJob(jobId: string): Promise<DownloadJobSnapshot | null> {
+  return invoke('cancel_download_job', { jobId });
+}
+
+/**
+ * Cancel a specific task within a download job.
+ */
+export async function cancelDownloadTask(jobId: string, taskId: string): Promise<DownloadJobSnapshot | null> {
+  return invoke('cancel_download_task', { jobId, taskId });
+}
+
+/**
+ * Retry all failed/cancelled tasks in a download job.
+ */
+export async function retryDownloadJob(jobId: string): Promise<DownloadJobSnapshot | null> {
+  return invoke('retry_download_job', { jobId });
+}
+
+/**
+ * Retry a specific failed/cancelled task within a download job.
+ */
+export async function retryDownloadTask(jobId: string, taskId: string): Promise<DownloadJobSnapshot | null> {
+  return invoke('retry_download_task', { jobId, taskId });
+}
+
+/**
+ * Remove completed/failed/cancelled jobs from history.
+ * Returns the number of jobs removed.
+ */
+export async function clearDownloadHistory(): Promise<number> {
+  return invoke('clear_download_history');
 }

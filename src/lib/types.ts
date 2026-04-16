@@ -54,6 +54,112 @@ export interface ThemePalette {
 
 export type OutputFormat = 'flac' | 'wav' | 'mp3';
 
+// ---------------------------------------------------------------------------
+// Download job types (mirrors siren-core/src/download/model.rs)
+// ---------------------------------------------------------------------------
+
+export type DownloadJobKind = 'song' | 'album' | 'selection';
+
+export type DownloadJobStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'partiallyFailed'
+  | 'failed'
+  | 'cancelled';
+
+export type DownloadTaskStatus =
+  | 'queued'
+  | 'preparing'
+  | 'downloading'
+  | 'writing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export type DownloadErrorCode =
+  | 'network'
+  | 'api'
+  | 'io'
+  | 'decode'
+  | 'tagging'
+  | 'lyrics'
+  | 'cancelled'
+  | 'invalidRequest'
+  | 'internal';
+
+export interface DownloadErrorInfo {
+  code: DownloadErrorCode;
+  message: string;
+  retryable: boolean;
+  details: string | null;
+}
+
+export interface DownloadOptions {
+  outputDir: string;
+  format: OutputFormat;
+  downloadLyrics: boolean;
+}
+
+export interface DownloadTaskSnapshot {
+  id: string;
+  jobId: string;
+  songCid: string;
+  songName: string;
+  artists: string[];
+  albumCid: string;
+  albumName: string;
+  status: DownloadTaskStatus;
+  bytesDone: number;
+  bytesTotal: number | null;
+  outputPath: string | null;
+  error: DownloadErrorInfo | null;
+  attempt: number;
+  songIndex: number;
+  songCount: number;
+}
+
+export interface DownloadJobSnapshot {
+  id: string;
+  kind: DownloadJobKind;
+  status: DownloadJobStatus;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  options: DownloadOptions;
+  title: string;
+  taskCount: number;
+  completedTaskCount: number;
+  failedTaskCount: number;
+  cancelledTaskCount: number;
+  tasks: DownloadTaskSnapshot[];
+  error: DownloadErrorInfo | null;
+}
+
+export interface DownloadManagerSnapshot {
+  jobs: DownloadJobSnapshot[];
+  activeJobId: string | null;
+  queuedJobIds: string[];
+}
+
+export interface DownloadTaskProgressEvent {
+  jobId: string;
+  taskId: string;
+  status: DownloadTaskStatus;
+  bytesDone: number;
+  bytesTotal: number | null;
+  songIndex: number;
+  songCount: number;
+  speedBytesPerSec: number;
+}
+
+export interface CreateDownloadJobRequest {
+  kind: DownloadJobKind;
+  songCids: string[];
+  albumCid: string | null;
+  options: DownloadOptions;
+}
+
 export interface PlayerState {
   songCid: string | null;
   songName: string | null;
