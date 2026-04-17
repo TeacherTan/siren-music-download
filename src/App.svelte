@@ -30,9 +30,9 @@
     retryDownloadJob,
     retryDownloadTask,
     clearDownloadHistory,
-    getNotificationPreferences,
-    setNotificationPreferences,
     sendTestNotification,
+    getPreferences,
+    setPreferences,
   } from "$lib/api";
   import { clearCache } from "$lib/cache";
   import type {
@@ -48,7 +48,7 @@
     DownloadTaskProgressEvent,
     CreateDownloadJobRequest,
     DownloadTaskSnapshot,
-    NotificationPreferences,
+    AppPreferences,
   } from "$lib/types";
   import { applyThemePalette, DEFAULT_THEME_PALETTE } from "$lib/theme";
   import { motionStyles } from "$lib/actions/motionStyles";
@@ -84,9 +84,6 @@
   const ALBUM_STAGE_BASE_VIEWPORT_RATIO = 1 / 3;
   const ALBUM_STAGE_COLLAPSE_SCROLL_RANGE = 260;
   const ALBUM_STAGE_SOLIDIFY_SCROLL_RANGE = 220;
-  const DOWNLOAD_LYRICS_PREF_KEY = "siren:download-lyrics-sidecar";
-  const NOTIFY_DOWNLOAD_PREF_KEY = "siren:notify-download";
-  const NOTIFY_PLAYBACK_PREF_KEY = "siren:notify-playback";
 
   const delay = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
@@ -1344,6 +1341,31 @@
     })();
   });
 
+  // Auto-save preferences via unified preferences API (after initialization)
+  $effect(() => {
+    const _fmt = format;
+    if (!prefsReady) return;
+    void savePreferences();
+  });
+
+  $effect(() => {
+    const _lyrics = downloadLyrics;
+    if (!prefsReady) return;
+    void savePreferences();
+  });
+
+  $effect(() => {
+    const _notif = notifyOnDownloadComplete;
+    if (!prefsReady) return;
+    void savePreferences();
+  });
+
+  $effect(() => {
+    const _playback = notifyOnPlaybackChange;
+    if (!prefsReady) return;
+    void savePreferences();
+  });
+
   $effect(() => {
     if (!albumStageEl) return;
 
@@ -1358,44 +1380,6 @@
     observer.observe(albumStageEl);
 
     return () => observer.disconnect();
-  });
-
-  $effect(() => {
-    if (typeof window === "undefined" || !downloadLyricsPrefReady) return;
-
-    try {
-      window.localStorage.setItem(
-        DOWNLOAD_LYRICS_PREF_KEY,
-        downloadLyrics ? "1" : "0",
-      );
-    } catch {
-      // ignore storage failures
-    }
-  });
-
-  $effect(() => {
-    if (typeof window === "undefined" || !notifyPrefReady) return;
-
-    try {
-      window.localStorage.setItem(
-        NOTIFY_DOWNLOAD_PREF_KEY,
-        notifyOnDownloadComplete ? "1" : "0",
-      );
-      window.localStorage.setItem(
-        NOTIFY_PLAYBACK_PREF_KEY,
-        notifyOnPlaybackChange ? "1" : "0",
-      );
-    } catch {
-      // ignore storage failures
-    }
-
-    const preferences: NotificationPreferences = {
-      notifyOnDownloadComplete,
-      notifyOnPlaybackChange,
-    };
-    void setNotificationPreferences(preferences).catch(() => {
-      // ignore backend sync failures
-    });
   });
 
   onMount(() => {
@@ -1424,39 +1408,32 @@
 
     async function initialize() {
       loadingAlbums = true;
-      try {
-        const backendPreferences = await getNotificationPreferences();
-        notifyOnDownloadComplete = backendPreferences.notifyOnDownloadComplete;
-        notifyOnPlaybackChange = backendPreferences.notifyOnPlaybackChange;
 
-        const stored = window.localStorage.getItem(DOWNLOAD_LYRICS_PREF_KEY);
-        if (stored !== null) {
-          downloadLyrics = stored === "1";
-        }
-        const storedDownload = window.localStorage.getItem(
-          NOTIFY_DOWNLOAD_PREF_KEY,
-        );
-        if (storedDownload !== null) {
-          notifyOnDownloadComplete = storedDownload === "1";
-        }
-        const storedPlayback = window.localStorage.getItem(
-          NOTIFY_PLAYBACK_PREF_KEY,
-        );
-        if (storedPlayback !== null) {
-          notifyOnPlaybackChange = storedPlayback === "1";
-        }
+      // Load unified preferences from backend (non-blocking on failure)
+      try {
+        const prefs = await getPreferences();
+        outputDir = prefs.outputDir || outputDir;
+        format = prefs.outputFormat || format;
+        downloadLyrics = prefs.downloadLyrics;
+        notifyOnDownloadComplete = prefs.notifyOnDownloadComplete;
+        notifyOnPlaybackChange = prefs.notifyOnPlaybackChange;
+        prefsReady = true;
       } catch {
-        // ignore storage failures
-      } finally {
-        downloadLyricsPrefReady = true;
-        notifyPrefReady = true;
+        prefsReady = true;
       }
 
       try {
-        [albums, outputDir] = await Promise.all([
+        // Load albums and get default output dir in parallel.
+        // outputDir from preferences takes precedence; getDefaultOutputDir() is only
+        // a fallback when preferences has no saved output dir.
+        const [albumsData, defaultDir] = await Promise.all([
           getAlbums(),
-          getDefaultOutputDir(),
+          outputDir ? Promise.resolve("") : getDefaultOutputDir(),
         ]);
+        if (defaultDir && !outputDir) {
+          outputDir = defaultDir;
+        }
+        albums = albumsData;
         // Auto-select the first album on startup
         if (albums.length > 0) {
           await handleSelectAlbum(albums[0]);
@@ -1722,19 +1699,21 @@
   let settingsOpen = $state(false);
   let isClearingAudioCache = $state(false);
   let downloadLyrics = $state(true);
-  let downloadLyricsPrefReady = $state(false);
   let notifyOnDownloadComplete = $state(true);
   let notifyOnPlaybackChange = $state(true);
-  let notifyPrefReady = $state(false);
   let isSendingTestNotification = $state(false);
   let isFormatHovered = $state(false);
   let isFormatFocused = $state(false);
   let isOutputDirHovered = $state(false);
   let isOutputDirFocused = $state(false);
+  let prefsReady = $state(false);
 
   async function handleSelectDirectory() {
     const dir = await selectDirectory(outputDir);
-    if (dir) outputDir = dir;
+    if (dir) {
+      outputDir = dir;
+      void savePreferences();
+    }
   }
 
   async function handleClearAudioCache() {
@@ -1766,6 +1745,27 @@
       notifyError(`发送测试通知失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       isSendingTestNotification = false;
+    }
+  }
+
+  async function savePreferences() {
+    const prefs: AppPreferences = {
+      outputFormat: format,
+      outputDir,
+      downloadLyrics,
+      notifyOnDownloadComplete,
+      notifyOnPlaybackChange,
+    };
+    try {
+      const updated = await setPreferences(prefs);
+      // Sync from returned values (backend may have normalized them)
+      format = updated.outputFormat;
+      outputDir = updated.outputDir;
+      downloadLyrics = updated.downloadLyrics;
+      notifyOnDownloadComplete = updated.notifyOnDownloadComplete;
+      notifyOnPlaybackChange = updated.notifyOnPlaybackChange;
+    } catch (e) {
+      console.error("[ERROR] Failed to save preferences:", e);
     }
   }
 

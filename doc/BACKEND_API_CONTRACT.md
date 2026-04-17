@@ -4,13 +4,14 @@
 
 相关文档：
 
-- [BACKEND_ROADMAP.md](BACKEND_ROADMAP.md)：后端未来规划（Phase 6/7）
+- [BACKEND_ROADMAP.md](BACKEND_ROADMAP.md)：后端未来规划（Phase 5~8）
 - [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md)：前端架构与开发指南
 
 ## 共享类型
 
 ### Rust / TS 对齐类型清单
 
+- `OutputFormat`
 - `DownloadOptions`
 - `DownloadJobKind`
 - `DownloadJobStatus`
@@ -22,10 +23,19 @@
 - `DownloadManagerSnapshot`
 - `CreateDownloadJobRequest`
 - `DownloadTaskProgressEvent`
+- `AppPreferences`
 - `NotificationPreferences`
 - `NotificationPermissionState`
 
 ## 类型字段定义
+
+### `OutputFormat`
+
+冻结枚举：
+
+- `flac`
+- `wav`
+- `mp3`
 
 ### `DownloadOptions`
 
@@ -148,6 +158,16 @@
 - `notifyOnDownloadComplete: boolean`
 - `notifyOnPlaybackChange: boolean`
 
+### `AppPreferences`
+
+统一应用偏好模型，持久化到 `{app_data_dir}/preferences.toml`。
+
+- `outputFormat: OutputFormat`
+- `outputDir: string`
+- `downloadLyrics: boolean`
+- `notifyOnDownloadComplete: boolean`
+- `notifyOnPlaybackChange: boolean`
+
 ### `NotificationPermissionState`
 
 冻结枚举：
@@ -191,6 +211,50 @@
 - 通知偏好存储在应用状态中，不持久化到磁盘
 - 通知权限状态由 Tauri 通知插件返回，反映系统级权限授予情况
 - 测试通知用于验证通知管道是否正常工作
+
+**废弃预告**：以上四个命令将在偏好系统重构完成后废弃，统一由 `get_preferences` / `set_preferences` 替代。
+
+### 偏好命令（统一）
+
+**v2 命令**，替代上述通知偏好命令，并扩展覆盖下载偏好。
+
+1. `get_preferences() -> AppPreferences`
+2. `set_preferences(preferences: AppPreferences) -> AppPreferences`
+3. `get_notification_permission_state() -> NotificationPermissionState`
+4. `send_test_notification() -> void`
+
+`set_preferences` 的验证规则：
+
+- `outputFormat`：必须是 `flac` | `wav` | `mp3` 之一
+- `outputDir`：路径必须存在且为目录
+- `downloadLyrics`：布尔值
+- `notifyOnDownloadComplete`：布尔值
+- `notifyOnPlaybackChange`：布尔值
+
+验证失败时返回错误字符串，命令不更新状态。
+
+存储说明：
+
+- 偏好通过版本化 TOML 文件持久化到 `{app_data_dir}/preferences.toml`
+- `{app_data_dir}` 路径由 Tauri 运行时根据 `tauri.conf.json` 中的 `identifier` 决定
+  - macOS：`~/Library/Application Support/{identifier}/`
+  - Windows：`%APPDATA%/{identifier}/`
+  - Linux：`~/.local/share/{identifier}/`
+- 文件顶层包含 `schemaVersion: integer` 字段，初始为 `1`，用于未来字段演进
+- 应用启动时自动加载，缺失或损坏时使用默认值初始化并写入磁盘
+- 设置变更时同步落盘（阻塞式原子写入）
+
+### 偏好备份命令
+
+1. `export_preferences(outputPath: string) -> AppPreferences`
+2. `import_preferences(inputPath: string) -> AppPreferences`
+
+说明：
+
+- `export_preferences`：将当前偏好完整导出到用户指定的路径，返回导出后的偏好快照
+- `import_preferences`：从用户指定的 TOML 文件导入偏好，验证通过后替换当前偏好并落盘，返回导入后的偏好
+- 导入时执行与 `set_preferences` 相同的验证规则，验证失败时返回错误且不更新状态
+- 导出/导入操作用户自行指定路径，不使用固定路径
 
 ## Events
 
@@ -259,3 +323,6 @@
 8. 取消语义为 best-effort，不对残留临时文件清理做对外承诺。
 9. 整专下载的文件组织方式冻结为"按专辑目录存储"，不采用输出根目录平铺。
 10. 整专下载时专辑封面作为 Job 级附属产物写入专辑目录，固定基础名为 `cover`。
+11. 偏好系统重构后，`AppPreferences` 为唯一偏好数据源，`OutputFormat` 枚举同步到前端共享类型。
+12. 偏好持久化使用手写 TOML 文件，不依赖外部插件。
+13. 偏好备份/恢复由用户指定文件路径，后端仅执行读写操作，不管理默认路径。

@@ -1,18 +1,31 @@
 //! macOS-specific notification implementation using notify-rust.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
 
 use notify_rust::{set_application, Notification};
 
-fn set_app_identity(app: &AppHandle) -> Result<(), String> {
-    let app_id = if cfg!(debug_assertions) {
-        "com.apple.Terminal"
-    } else {
-        app.config().identifier.as_str()
-    };
+/// Ensures `set_application` is called at most once per process lifetime.
+/// The underlying library has a global lock that errors on repeated calls.
+/// In release mode, we skip this call entirely — the app bundle's identifier
+/// is automatically used by the notification system.
+static APP_IDENTITY_SET: AtomicBool = AtomicBool::new(false);
 
-    set_application(app_id).map_err(|error| {
+fn set_app_identity(_app: &AppHandle) -> Result<(), String> {
+    // In release mode, the app runs as a proper .app bundle.
+    // notify_rust automatically uses the bundle identifier,
+    // and calling set_application can cause unwanted Terminal window activation.
+    if !cfg!(debug_assertions) {
+        return Ok(());
+    }
+
+    if APP_IDENTITY_SET.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    // Debug mode: use Terminal as a fallback since the app runs from CLI.
+    set_application("com.apple.Terminal").map_err(|error| {
         let message = format!("set_application failed: {error}");
         eprintln!("[notification:macos] {message}");
         message

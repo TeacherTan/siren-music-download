@@ -1,59 +1,55 @@
+use crate::preferences::{AppPreferences, PreferencesStore};
 use crate::audio_cache;
 use crate::player::stream::{GrowingFileHandle, PlaybackInput, SampleBuffer};
 use crate::player::{AudioPlayer, PlaybackContext, PlaybackQueueEntry};
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use siren_core::DownloadService;
 use siren_core::OutputFormat;
 use souvlaki::{MediaControlEvent, SeekDirection};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex as StdMutex};
+use tauri::Manager;
 use tokio::sync::Mutex;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct NotificationPreferences {
-    pub(crate) notify_on_download_complete: bool,
-    pub(crate) notify_on_playback_change: bool,
-}
-
-impl Default for NotificationPreferences {
-    fn default() -> Self {
-        Self {
-            notify_on_download_complete: true,
-            notify_on_playback_change: true,
-        }
-    }
-}
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) player: Arc<AudioPlayer>,
     pub(crate) api: Arc<siren_core::ApiClient>,
     pub(crate) download_service: Arc<Mutex<DownloadService>>,
-    pub(crate) notification_preferences: Arc<StdMutex<NotificationPreferences>>,
+    pub(crate) preferences_store: Arc<PreferencesStore>,
+    pub(crate) preferences: Arc<StdMutex<AppPreferences>>,
 }
 
 impl AppState {
     pub(crate) fn new(app: tauri::AppHandle) -> Result<Self, String> {
-        let player = AudioPlayer::new(app).map_err(|e| e.to_string())?;
+        let player = AudioPlayer::new(app.clone()).map_err(|e| e.to_string())?;
         let api = siren_core::ApiClient::new().map_err(|e| e.to_string())?;
         let download_service = Arc::new(Mutex::new(DownloadService::new()));
-        let notification_preferences = Arc::new(StdMutex::new(NotificationPreferences::default()));
+        let app_data_dir = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("failed to get app data dir: {e}"))?;
+        let store = PreferencesStore::new(app_data_dir);
+        let preferences = store.load();
         Ok(Self {
             player: Arc::new(player),
             api: Arc::new(api),
             download_service,
-            notification_preferences,
+            preferences_store: Arc::new(store),
+            preferences: Arc::new(StdMutex::new(preferences)),
         })
     }
 
-    pub(crate) fn notification_preferences(&self) -> NotificationPreferences {
-        self.notification_preferences.lock().unwrap().clone()
+    pub(crate) fn preferences(&self) -> AppPreferences {
+        self.preferences.lock().unwrap().clone()
     }
 
-    pub(crate) fn set_notification_preferences(&self, preferences: NotificationPreferences) {
-        *self.notification_preferences.lock().unwrap() = preferences;
+    pub(crate) fn set_preferences(&self, prefs: AppPreferences) {
+        *self.preferences.lock().unwrap() = prefs;
+    }
+
+    pub(crate) fn preferences_store(&self) -> Arc<PreferencesStore> {
+        self.preferences_store.clone()
     }
 
     pub(crate) async fn play_song_internal(

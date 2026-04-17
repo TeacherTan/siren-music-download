@@ -180,6 +180,14 @@ export interface NotificationPreferences {
   notifyOnPlaybackChange: boolean;
 }
 
+export interface AppPreferences {
+  outputFormat: OutputFormat;
+  outputDir: string;
+  downloadLyrics: boolean;
+  notifyOnDownloadComplete: boolean;
+  notifyOnPlaybackChange: boolean;
+}
+
 export type NotificationPermissionState =
   | 'granted'
   | 'denied'

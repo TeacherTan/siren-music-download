@@ -38,6 +38,7 @@ mod commands;
 mod downloads;
 mod notification;
 mod player;
+mod preferences;
 mod theme;
 
 use anyhow::Context;
@@ -137,8 +138,10 @@ fn main() {
             commands::playback::play_previous,
             commands::playback::get_player_state,
             commands::playback::set_playback_volume,
-            commands::preferences::get_notification_preferences,
-            commands::preferences::set_notification_preferences,
+            commands::preferences::get_preferences,
+            commands::preferences::set_preferences,
+            commands::preferences::export_preferences,
+            commands::preferences::import_preferences,
             commands::preferences::get_notification_permission_state,
             commands::preferences::send_test_notification,
             commands::downloads::download_song,

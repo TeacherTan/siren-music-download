@@ -4,7 +4,7 @@ import { getCached, setCached } from './cache';
 import type {
   Album, AlbumDetail, SongDetail, ThemePalette, PlayerState, PlaybackContext,
   CreateDownloadJobRequest, DownloadJobSnapshot, DownloadManagerSnapshot,
-  NotificationPermissionState, NotificationPreferences,
+  NotificationPermissionState, NotificationPreferences, AppPreferences,
 } from './types';
 import type { OutputFormat } from './types';
 
@@ -297,4 +297,37 @@ export async function getNotificationPermissionState(): Promise<NotificationPerm
  */
 export async function sendTestNotification(): Promise<void> {
   return invoke('send_test_notification');
+}
+
+// ---------------------------------------------------------------------------
+// Unified preferences API (Phase 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Get all app preferences from the Tauri backend.
+ */
+export async function getPreferences(): Promise<AppPreferences> {
+  return invoke<AppPreferences>('get_preferences');
+}
+
+/**
+ * Update all app preferences in the Tauri backend.
+ * Returns the normalized preferences (backend may adjust values).
+ */
+export async function setPreferences(preferences: AppPreferences): Promise<AppPreferences> {
+  return invoke<AppPreferences>('set_preferences', { preferences });
+}
+
+/**
+ * Export app preferences to a TOML file at the given path.
+ */
+export async function exportPreferences(outputPath: string): Promise<AppPreferences> {
+  return invoke<AppPreferences>('export_preferences', { outputPath });
+}
+
+/**
+ * Import app preferences from a TOML file at the given path.
+ */
+export async function importPreferences(inputPath: string): Promise<AppPreferences> {
+  return invoke<AppPreferences>('import_preferences', { inputPath });
 }

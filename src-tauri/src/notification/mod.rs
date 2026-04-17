@@ -23,7 +23,7 @@ static LAST_NOTIFIED_SONG: Mutex<Option<String>> = Mutex::new(None);
 /// - Album (partially failed): "Album Name" / "专辑下载完成（N 首成功，M 首失败）"
 pub fn notify_download_completed(app: &AppHandle, job: &DownloadJobSnapshot) {
     let state = app.state::<AppState>();
-    let prefs = state.notification_preferences();
+    let prefs = state.preferences();
     if !prefs.notify_on_download_complete {
         return;
     }
@@ -73,7 +73,7 @@ pub fn notify_download_completed(app: &AppHandle, job: &DownloadJobSnapshot) {
 /// Deduplicates by song CID to avoid repeated notifications for the same track.
 pub fn notify_playback_changed(app: &AppHandle, player_state: &PlayerState) {
     let app_state = app.state::<AppState>();
-    let prefs = app_state.notification_preferences();
+    let prefs = app_state.preferences();
     if !prefs.notify_on_playback_change {
         return;
     }
