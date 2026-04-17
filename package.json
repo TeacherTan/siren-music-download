@@ -29,7 +29,6 @@
   "devDependencies": {
     "@internationalized/date": "^3.12.1",
     "@lucide/svelte": "^1.8.0",
-    "@rolldown/binding-win32-x64-msvc": "^1.0.0-rc.16",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@tailwindcss/vite": "^4.1.14",
     "@tauri-apps/cli": "^2.9.2",
