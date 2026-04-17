@@ -2,7 +2,10 @@
 
 本文档是下载任务系统的唯一契约来源，定义了前后端共享的类型、命令、事件和状态机规则。
 
-**重要**：PRD 和 PLAN 文档应引用本文档，不再重复这些定义。
+相关文档：
+
+- [BACKEND_ROADMAP.md](BACKEND_ROADMAP.md)：后端未来规划（Phase 6/7）
+- [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md)：前端架构与开发指南
 
 ## 共享类型
 

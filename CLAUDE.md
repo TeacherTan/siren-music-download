@@ -131,10 +131,11 @@ Cargo workspace
 ## 文档结构
 
 - `README.md`：项目介绍、使用方式、构建命令
-- `UI_DESIGN.md`：界面布局、交互模式、主题策略
-- `doc/BACKEND_API_CONTRACT.md`：下载任务系统 API 契约（唯一事实来源）
-- `doc/BACKEND_API_PRD.md`：下载任务系统产品需求
-- `doc/BACKEND_API_PLAN.md`：下载任务系统实施计划
+- `doc/BACKEND_API_CONTRACT.md`：后端类型、命令、事件的唯一契约来源
+- `doc/BACKEND_ROADMAP.md`：后端未来规划（Phase 6/7）
+- `doc/FRONTEND_GUIDE.md`：前端架构、开发约定与验收基线
+- `doc/DECISIONS.md`：技术选型决策记录（ADR）
+- `doc/RELEASE_PROCESS.md`：CI 与发布流程
 
 ## 当前实现状态
 

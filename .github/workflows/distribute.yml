@@ -1,45 +1,165 @@
 name: Distribute desktop builds
 
 on:
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: Optional tag name for publishing a GitHub Release, for example v0.1.0
-        required: false
-        type: string
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
+  resolve-release:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.release_meta.outputs.should_release }}
+      release_tag: ${{ steps.release_meta.outputs.release_tag }}
+      release_version: ${{ steps.release_meta.outputs.release_version }}
+      release_name: ${{ steps.release_meta.outputs.release_name }}
+      prerelease: ${{ steps.release_meta.outputs.prerelease }}
+
+    steps:
+      - name: Resolve release metadata from merged PR
+        id: release_meta
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          normalize_version() {
+            local raw="$1"
+            local core
+            local prerelease=""
+
+            raw="${raw#v}"
+
+            if [[ "$raw" == *-* ]]; then
+              core="${raw%%-*}"
+              prerelease="-${raw#*-}"
+            else
+              core="$raw"
+            fi
+
+            IFS='.' read -r -a parts <<< "$core"
+            if [ "${#parts[@]}" -lt 1 ] || [ "${#parts[@]}" -gt 3 ]; then
+              return 1
+            fi
+
+            for part in "${parts[@]}"; do
+              [[ "$part" =~ ^[0-9]+$ ]] || return 1
+            done
+
+            while [ "${#parts[@]}" -lt 3 ]; do
+              parts+=("0")
+            done
+
+            printf 'v%s.%s.%s%s\n' "${parts[0]}" "${parts[1]}" "${parts[2]}" "$prerelease"
+          }
+
+          bump_minor_version() {
+            local normalized="${1#v}"
+            local core="${normalized%%-*}"
+            local major
+            local minor
+            local patch
+
+            IFS='.' read -r major minor patch <<< "$core"
+            printf 'v%d.%d.0\n' "$major" "$((minor + 1))"
+          }
+
+          pr_json="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" -H "Accept: application/vnd.github+json")"
+          pr="$(jq -c 'map(select(.merged_at != null and .base.ref == "main"))[0] // empty' <<< "$pr_json")"
+
+          if [ -z "$pr" ]; then
+            echo "No merged pull request is associated with $GITHUB_SHA; skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          pr_title="$(jq -r '.title' <<< "$pr")"
+          pr_body="$(jq -r '.body // ""' <<< "$pr")"
+          pr_text="$(printf '%s\n%s\n' "$pr_title" "$pr_body")"
+
+          release_requested="false"
+          if printf '%s' "$pr_body" | grep -Eq -- '- \[[xX]\] 合并到 `main` 后发布新版本'; then
+            release_requested="true"
+          fi
+
+          raw_marker="$(printf '%s' "$pr_text" | perl -ne 'if (/release-as\s*:\s*(v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?)/i) { print $1; exit }')"
+
+          if [ -z "$raw_marker" ] && [ "$release_requested" != "true" ]; then
+            echo "Merged PR has no explicit release intent; skipping release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "$raw_marker" ]; then
+            if ! release_tag="$(normalize_version "$raw_marker")"; then
+              echo "Invalid release marker: $raw_marker" >&2
+              exit 1
+            fi
+          else
+            latest_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq 'map(select(.draft == false and .prerelease == false))[0].tag_name' 2>/dev/null || true)"
+            if [ -z "$latest_tag" ] || [ "$latest_tag" = "null" ]; then
+              release_tag="v0.1.0"
+            else
+              normalized_latest="$(normalize_version "$latest_tag")"
+              release_tag="$(bump_minor_version "$normalized_latest")"
+            fi
+          fi
+
+          if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $release_tag already exists." >&2
+            exit 1
+          fi
+
+          prerelease="false"
+          if [[ "$release_tag" == *-* ]]; then
+            prerelease="true"
+          fi
+
+          echo "Resolved release tag: $release_tag"
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release_version=${release_tag#v}" >> "$GITHUB_OUTPUT"
+          echo "release_name=Siren Music Download $release_tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
   build-and-distribute:
     name: ${{ matrix.name }}
+    needs: resolve-release
+    if: needs.resolve-release.outputs.should_release == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Release asset policy:
+          # - Releases are only created when the merged PR explicitly requests a release.
+          # - macOS publishes DMG bundles per architecture.
+          # - Windows intentionally publishes a portable .exe and relies on the user's installed WebView2 runtime.
+          #   Do not switch this back to NSIS unless the release distribution strategy changes.
           - name: macOS Intel
             runner: macos-15-intel
             target: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
             artifact_glob: target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
-            asset_suffix: darwin_x64.dmg
+            asset_suffix: macos_intel.dmg
           - name: macOS Apple Silicon
             runner: macos-15
             target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
             artifact_glob: target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-            asset_suffix: darwin_aarch64.dmg
+            asset_suffix: macos_apple_silicon.dmg
           - name: Windows x64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
-            args: --target x86_64-pc-windows-msvc --bundles nsis
-            artifact_glob: target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            asset_suffix: windows_x64.exe
+            args: --target x86_64-pc-windows-msvc --no-bundle
+            artifact_glob: target/x86_64-pc-windows-msvc/release/siren-music-download.exe
+            asset_suffix: windows_x64_portable_webview2.exe
 
     steps:
       - name: Checkout repository
@@ -55,6 +175,33 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Apply resolved release version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.resolve-release.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs")
+            const releaseVersion = process.env.RELEASE_VERSION
+
+            const packagePath = "package.json"
+            const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"))
+            packageJson.version = releaseVersion
+            fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`)
+
+            const tauriPath = "src-tauri/tauri.conf.json"
+            const tauriJson = JSON.parse(fs.readFileSync(tauriPath, "utf8"))
+            tauriJson.version = releaseVersion
+            fs.writeFileSync(tauriPath, `${JSON.stringify(tauriJson, null, 2)}\n`)
+
+            const cargoPath = "src-tauri/Cargo.toml"
+            const cargoToml = fs
+              .readFileSync(cargoPath, "utf8")
+              .replace(/^version = ".*"$/m, `version = "${releaseVersion}"`)
+            fs.writeFileSync(cargoPath, cargoToml)
+          '
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -63,7 +210,7 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Build desktop bundle
+      - name: Build desktop release asset
         uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -74,17 +221,18 @@ jobs:
           includeDebug: false
           includeUpdaterJson: false
 
-      - name: Collect installer asset
+      - name: Collect release asset
         id: collect_asset
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.resolve-release.outputs.release_version }}
         run: |
           set -euo pipefail
-          version="$(node -p "require('./package.json').version")"
-          asset_name="siren-music-download_${version}_${{ matrix.asset_suffix }}"
+          asset_name="siren-music-download_${RELEASE_VERSION}_${{ matrix.asset_suffix }}"
           shopt -s nullglob
           files=( ${{ matrix.artifact_glob }} )
           if [ "${#files[@]}" -ne 1 ]; then
-            echo "Expected exactly one installer, got ${#files[@]}" >&2
+            echo "Expected exactly one release asset, got ${#files[@]}" >&2
             printf '%s\n' "${files[@]}"
             exit 1
           fi
@@ -94,22 +242,20 @@ jobs:
           echo "asset_path=release-assets/${asset_name}" >> "$GITHUB_OUTPUT"
 
       - name: Upload workflow artifacts
-        if: github.ref_type != 'tag' && !(github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.target }}-installer
+          name: ${{ matrix.target }}-release-asset
           path: ${{ steps.collect_asset.outputs.asset_path }}
           if-no-files-found: error
           compression-level: 0
 
       - name: Ensure GitHub Release exists
-        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag }}
-          RELEASE_NAME: Siren Music Download ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag }}
-          PRERELEASE: ${{ contains(github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag, '-') }}
+          RELEASE_TAG: ${{ needs.resolve-release.outputs.release_tag }}
+          RELEASE_NAME: ${{ needs.resolve-release.outputs.release_name }}
+          PRERELEASE: ${{ needs.resolve-release.outputs.prerelease }}
         run: |
           set -euo pipefail
           if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -121,11 +267,10 @@ jobs:
           fi
 
       - name: Upload release asset
-        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.release_tag }}
+          RELEASE_TAG: ${{ needs.resolve-release.outputs.release_tag }}
         run: |
           set -euo pipefail
           gh release upload "$RELEASE_TAG" "${{ steps.collect_asset.outputs.asset_path }}" --repo "$GITHUB_REPOSITORY" --clobber
