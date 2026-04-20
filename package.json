@@ -1,6 +1,7 @@
 {
   "name": "siren-music-download",
   "version": "0.1.0",
+  "packageManager": "pnpm@10.33.0",
   "type": "module",
   "description": "基于 [Rust](https://www.rust-lang.org/) + [Tauri 2](https://tauri.app/) 构建的跨平台无损音乐下载工具，支持从[塞壬唱片官网](https://monster-siren.hypergryph.com/)下载全部专辑及曲目。",
   "scripts": {
@@ -10,9 +11,9 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "check": "npm run check:types && npm run check:svelte && npm run check:build",
+    "check": "pnpm run check:types && pnpm run check:svelte && pnpm run check:build",
     "check:types": "tsc --noEmit",
-    "check:svelte": "npx svelte-check",
+    "check:svelte": "pnpm exec svelte-check",
     "check:build": "vite build",
     "check:cargo": "cargo check --workspace"
   },

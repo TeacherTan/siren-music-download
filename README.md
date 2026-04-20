@@ -53,19 +53,22 @@
 ### 环境要求
 
 - Rust
-- Node.js 18+
+- Node.js 24+（与 CI 保持一致；最低需满足 20.19+ / 22.12+ / 24+ 之一）
+- pnpm 10.33.0（推荐通过 `corepack enable` 启用）
 
 ### 常用命令
 
+仓库前端依赖统一使用 `pnpm` 管理，`pnpm-lock.yaml` 是唯一锁文件，不再维护 `package-lock.json`。
+
 ```bash
-npm install
-npm run tauri:dev
+pnpm install
+pnpm run tauri:dev
 ```
 
 ```bash
-npm run check
-npm run build
-npm run tauri:build
+pnpm run check
+pnpm run build
+pnpm run tauri:build
 cargo check --workspace
 ```
 

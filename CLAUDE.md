@@ -11,10 +11,10 @@ This file provides guidance to Claude Code when working with this repository.
 ## 常用命令
 
 ```bash
-npm install
-npm run tauri:dev
-npm run build
-npm run tauri:build
+pnpm install
+pnpm run tauri:dev
+pnpm run build
+pnpm run tauri:build
 
 cargo check --workspace
 cargo fmt --all

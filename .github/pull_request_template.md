@@ -4,7 +4,7 @@
 
 ## 测试计划
 
-- [ ] `npm run check`
+- [ ] `pnpm run check`
 - [ ] `cargo check --workspace`
 - [ ] `cargo test --workspace`
 

@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "identifier": "com.siren.music-download",
   "build": {
-    "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "npm run build && npm run dev",
+    "beforeBuildCommand": "pnpm run build",
+    "beforeDevCommand": "pnpm run build && pnpm run dev",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },

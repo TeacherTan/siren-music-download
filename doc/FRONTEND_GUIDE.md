@@ -384,15 +384,15 @@ App.svelte
 
 ### Baseline Notes
 
-- `cargo build` 在全新 worktree 中会先依赖前端 `dist/` 产物，需要先执行 `npm run build`
-- `npm run check:types` 和 `npm run check:build` 在补齐依赖后可通过
+- `cargo build` 在全新 worktree 中会先依赖前端 `dist/` 产物，需要先执行 `pnpm run build`
+- `pnpm run check:types` 和 `pnpm run check:build` 在补齐依赖后可通过
 - `cargo check` 仍有一个既有 warning：`src-tauri/src/notification/desktop.rs` 中的 `Manager` 未使用
 
 ### Latest Verification
 
 通过的命令：
-- `npm run check`
-- `npm run check:cargo`
+- `pnpm run check`
+- `pnpm run check:cargo`
 
 ### Core Flows
 
