@@ -1,3 +1,43 @@
+export type LocalTrackDownloadStatus =
+  | 'missing'
+  | 'detected'
+  | 'verified'
+  | 'mismatch'
+  | 'partial'
+  | 'unverifiable'
+  | 'unknown';
+
+export interface TrackDownloadBadge {
+  isDownloaded: boolean;
+  downloadStatus: LocalTrackDownloadStatus;
+  inventoryVersion: string;
+}
+
+export type LocalInventoryStatus = 'idle' | 'scanning' | 'completed' | 'failed';
+
+export type VerificationMode = 'none' | 'whenAvailable' | 'strict';
+
+export interface LocalInventorySnapshot {
+  rootOutputDir: string;
+  status: LocalInventoryStatus;
+  inventoryVersion: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  scannedFileCount: number;
+  matchedTrackCount: number;
+  verifiedTrackCount: number;
+  lastError: string | null;
+}
+
+export interface LocalInventoryScanProgressEvent {
+  rootOutputDir: string;
+  inventoryVersion: string;
+  filesScanned: number;
+  matchedTrackCount: number;
+  verifiedTrackCount: number;
+  currentPath: string | null;
+}
+
 export interface Album {
   cid: string;
   name: string;
@@ -9,6 +49,7 @@ export interface SongEntry {
   cid: string;
   name: string;
   artists: string[];
+  download: TrackDownloadBadge;
 }
 
 export interface PlaybackQueueEntry {
@@ -32,6 +73,7 @@ export interface SongDetail {
   mvUrl: string | null;
   mvCoverUrl: string | null;
   artists: string[];
+  download: TrackDownloadBadge;
 }
 
 export interface AlbumDetail {
@@ -175,9 +217,58 @@ export interface PlayerState {
   volume: number;
 }
 
-export interface NotificationPreferences {
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface AppPreferences {
+  outputFormat: OutputFormat;
+  outputDir: string;
+  downloadLyrics: boolean;
   notifyOnDownloadComplete: boolean;
   notifyOnPlaybackChange: boolean;
+  logLevel: LogLevel;
+}
+
+export type AppErrorLevel = 'warn' | 'error';
+
+export interface AppErrorEvent {
+  id: string;
+  ts: string;
+  level: AppErrorLevel;
+  domain: string;
+  code: string;
+  message: string;
+}
+
+export type LogFileKind = 'session' | 'persistent';
+
+export interface LogViewerQuery {
+  kind: LogFileKind;
+  level?: LogLevel | null;
+  domain?: string | null;
+  search?: string | null;
+  limit?: number | null;
+  offset?: number | null;
+}
+
+export interface LogViewerRecord {
+  id: string;
+  ts: string;
+  level: LogLevel;
+  domain: string;
+  code: string;
+  message: string;
+  details: string | null;
+}
+
+export interface LogViewerPage {
+  records: LogViewerRecord[];
+  total: number;
+  kind: LogFileKind;
+}
+
+export interface LogFileStatus {
+  hasSessionLog: boolean;
+  hasPersistentLog: boolean;
 }
 
 export type NotificationPermissionState =

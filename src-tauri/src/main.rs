@@ -13,9 +13,8 @@
 //!   [`commands::play_next`]、[`commands::play_previous`]、
 //!   [`commands::stop_playback`]、[`commands::get_player_state`]、
 //!   [`commands::set_playback_volume`]
-//! - 下载和工具：[`commands::download_song`]、
-//!   [`commands::get_default_output_dir`]、[`commands::clear_audio_cache`]、
-//!   [`commands::extract_image_theme`]
+//! - 下载和工具：[`commands::get_default_output_dir`]、
+//!   [`commands::clear_audio_cache`]、[`commands::extract_image_theme`]
 //!
 //! # 事件
 //!
@@ -36,13 +35,17 @@ mod app_state;
 mod audio_cache;
 mod commands;
 mod downloads;
+mod local_inventory;
+mod logging;
 mod notification;
 mod player;
+mod preferences;
 mod theme;
 
 use anyhow::Context;
 use app_state::AppState;
-use tauri::{LogicalSize, Manager, WebviewWindow};
+use logging::{LogLevel, LogPayload};
+use tauri::{LogicalSize, Manager, RunEvent, WebviewWindow};
 
 const PLAYER_BAR_SAFE_WINDOW_WIDTH: f64 = 1120.0;
 const MIN_LAYOUT_WINDOW_WIDTH: f64 = 1120.0;
@@ -98,20 +101,41 @@ fn main() {
             let window = app
                 .get_webview_window("main")
                 .context("Failed to locate main window")?;
-            if let Err(error) = fit_main_window_to_monitor(&window) {
-                eprintln!("[window] failed to fit main window to monitor: {error}");
-            }
-
             let state =
                 AppState::new(app.handle().clone()).expect("Failed to initialize app state");
+            if let Err(error) = fit_main_window_to_monitor(&window) {
+                state.log_center.record(
+                    LogPayload::new(
+                        LogLevel::Warn,
+                        "window",
+                        "window.fit_monitor_failed",
+                        "Failed to fit main window to monitor",
+                    )
+                    .details(error.to_string()),
+                );
+            }
             let media_state = state.clone();
             if let Err(error) = state
                 .player
                 .bind_media_controls(move |event| media_state.handle_media_control(event))
             {
-                eprintln!("[media-session] disabled: {error:#}");
+                state.log_center.record(
+                    LogPayload::new(
+                        LogLevel::Warn,
+                        "media-session",
+                        "media_session.bind_failed",
+                        "Failed to bind media controls",
+                    )
+                    .details(format!("{error:#}")),
+                );
             }
             downloads::bridge::initialize(app.handle(), &state);
+            local_inventory::spawn_inventory_scan(
+                app.handle().clone(),
+                state.clone(),
+                state.preferences().output_dir,
+                None,
+            );
             app.manage(state);
 
             #[cfg(debug_assertions)]
@@ -137,11 +161,17 @@ fn main() {
             commands::playback::play_previous,
             commands::playback::get_player_state,
             commands::playback::set_playback_volume,
-            commands::preferences::get_notification_preferences,
-            commands::preferences::set_notification_preferences,
+            commands::preferences::get_preferences,
+            commands::preferences::set_preferences,
+            commands::preferences::export_preferences,
+            commands::preferences::import_preferences,
+            commands::local_inventory::get_local_inventory_snapshot,
+            commands::local_inventory::rescan_local_inventory,
+            commands::local_inventory::cancel_local_inventory_scan,
             commands::preferences::get_notification_permission_state,
             commands::preferences::send_test_notification,
-            commands::downloads::download_song,
+            commands::logging::list_log_records,
+            commands::logging::get_log_file_status,
             commands::downloads::clear_audio_cache,
             commands::downloads::create_download_job,
             commands::downloads::list_download_jobs,
@@ -152,6 +182,20 @@ fn main() {
             commands::downloads::retry_download_task,
             commands::downloads::clear_download_history,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            match event {
+                RunEvent::ExitRequested { .. } | RunEvent::Exit => {
+                    if let Some(state) = app_handle.try_state::<AppState>() {
+                        let threshold = LogLevel::parse(&state.preferences().log_level)
+                            .unwrap_or(LogLevel::Error);
+                        if let Err(error) = state.log_center.flush_session_to_persistent(threshold) {
+                            eprintln!("[logging] failed to flush session logs: {error:#}");
+                        }
+                    }
+                }
+                _ => {}
+            }
+        });
 }

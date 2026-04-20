@@ -54,7 +54,7 @@ jobs:
 
             while [ "${#parts[@]}" -lt 3 ]; do
               parts+=("0")
-            done
+            fi
 
             printf 'v%s.%s.%s%s\n' "${parts[0]}" "${parts[1]}" "${parts[2]}" "$prerelease"
           }
@@ -169,11 +169,12 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Apply resolved release version
         shell: bash
@@ -216,7 +217,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: .
-          tauriScript: npx tauri
+          tauriScript: bun tauri
           args: ${{ matrix.args }}
           includeDebug: false
           includeUpdaterJson: false

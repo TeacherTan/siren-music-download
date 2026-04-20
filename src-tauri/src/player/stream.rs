@@ -7,6 +7,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+
+pub type PlaybackErrorHandler = Arc<dyn Fn(String) + Send + Sync>;
 use symphonia::core::audio::SampleBuffer as SymphoniaSampleBuffer;
 use symphonia::core::codecs::{
     CodecParameters, Decoder as SymphoniaDecoder, DecoderOptions, CODEC_TYPE_NULL,
@@ -67,6 +69,7 @@ impl PlaybackInput {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         start_position_secs: f64,
+        error_handler: PlaybackErrorHandler,
     ) -> Result<JoinHandle<()>> {
         let reader = self.open_reader()?;
         let hint = self.build_hint();
@@ -79,6 +82,7 @@ impl PlaybackInput {
             stop_flag,
             pause_flag,
             start_position_secs,
+            error_handler,
         ))
     }
 
@@ -415,6 +419,7 @@ fn spawn_decode_worker(
     stop_flag: Arc<AtomicBool>,
     pause_flag: Arc<AtomicBool>,
     start_position_secs: f64,
+    error_handler: PlaybackErrorHandler,
 ) -> JoinHandle<()> {
     thread::Builder::new()
         .name("audio-decode-worker".into())
@@ -515,8 +520,9 @@ fn spawn_decode_worker(
             })();
 
             if let Err(error) = result {
-                eprintln!("[player] decode worker error: {error:#}");
-                sample_buffer.fail(error.to_string());
+                let message = format!("{error:#}");
+                error_handler(message.clone());
+                sample_buffer.fail(message);
             }
         })
         .expect("Failed to spawn audio decode worker")

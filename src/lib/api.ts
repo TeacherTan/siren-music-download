@@ -4,7 +4,8 @@ import { getCached, setCached } from './cache';
 import type {
   Album, AlbumDetail, SongDetail, ThemePalette, PlayerState, PlaybackContext,
   CreateDownloadJobRequest, DownloadJobSnapshot, DownloadManagerSnapshot,
-  NotificationPermissionState, NotificationPreferences,
+  NotificationPermissionState, AppPreferences, LocalInventorySnapshot,
+  VerificationMode, LogViewerPage, LogViewerQuery, LogFileStatus,
 } from './types';
 import type { OutputFormat } from './types';
 
@@ -25,8 +26,12 @@ export async function getAlbums(): Promise<Album[]> {
 /**
  * Get album detail with caching (6h TTL).
  */
-export async function getAlbumDetail(albumCid: string): Promise<AlbumDetail> {
-  const cacheKey = `${CACHE_KEY_ALBUM_DETAIL}${albumCid}`;
+export async function getAlbumDetail(
+  albumCid: string,
+  inventoryVersion?: string | null,
+): Promise<AlbumDetail> {
+  const cacheScope = inventoryVersion ?? 'unversioned';
+  const cacheKey = `${CACHE_KEY_ALBUM_DETAIL}${cacheScope}:${albumCid}`;
   const cached = getCached<AlbumDetail>(cacheKey);
   if (cached) {
     return cached;
@@ -160,23 +165,6 @@ export async function clearAudioCache(): Promise<number> {
 }
 
 /**
- * Download a single song into the selected output directory.
- */
-export async function downloadSong(
-  songCid: string,
-  outputDir: string,
-  format: OutputFormat,
-  downloadLyrics: boolean,
-): Promise<string> {
-  return invoke('download_song', {
-    songCid,
-    outputDir,
-    format,
-    downloadLyrics,
-  });
-}
-
-/**
  * Extract a theme palette from artwork and cache it for reuse.
  */
 export async function extractImageTheme(imageUrl: string): Promise<ThemePalette> {
@@ -270,22 +258,6 @@ export async function clearDownloadHistory(): Promise<number> {
 }
 
 /**
- * Get notification preferences from the Tauri backend.
- */
-export async function getNotificationPreferences(): Promise<NotificationPreferences> {
-  return invoke('get_notification_preferences');
-}
-
-/**
- * Update notification preferences in the Tauri backend.
- */
-export async function setNotificationPreferences(
-  preferences: NotificationPreferences,
-): Promise<NotificationPreferences> {
-  return invoke('set_notification_preferences', { preferences });
-}
-
-/**
  * Get notification permission state from the Tauri backend.
  */
 export async function getNotificationPermissionState(): Promise<NotificationPermissionState> {
@@ -297,4 +269,70 @@ export async function getNotificationPermissionState(): Promise<NotificationPerm
  */
 export async function sendTestNotification(): Promise<void> {
   return invoke('send_test_notification');
+}
+
+/**
+ * Get the latest local inventory snapshot.
+ */
+export async function getLocalInventorySnapshot(): Promise<LocalInventorySnapshot> {
+  return invoke<LocalInventorySnapshot>('get_local_inventory_snapshot');
+}
+
+/**
+ * Trigger a local inventory rescan.
+ */
+export async function rescanLocalInventory(
+  verificationMode?: VerificationMode,
+): Promise<LocalInventorySnapshot> {
+  return invoke<LocalInventorySnapshot>('rescan_local_inventory', {
+    verificationMode: verificationMode ?? null,
+  });
+}
+
+/**
+ * Cancel the current local inventory scan.
+ */
+export async function cancelLocalInventoryScan(): Promise<LocalInventorySnapshot> {
+  return invoke<LocalInventorySnapshot>('cancel_local_inventory_scan');
+}
+
+// ---------------------------------------------------------------------------
+// Unified preferences API (Phase 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Get all app preferences from the Tauri backend.
+ */
+export async function getPreferences(): Promise<AppPreferences> {
+  return invoke<AppPreferences>('get_preferences');
+}
+
+/**
+ * Update all app preferences in the Tauri backend.
+ * Returns the normalized preferences (backend may adjust values).
+ */
+export async function setPreferences(preferences: AppPreferences): Promise<AppPreferences> {
+  return invoke<AppPreferences>('set_preferences', { preferences });
+}
+
+/**
+ * Export app preferences to a TOML file at the given path.
+ */
+export async function exportPreferences(outputPath: string): Promise<AppPreferences> {
+  return invoke<AppPreferences>('export_preferences', { outputPath });
+}
+
+/**
+ * Import app preferences from a TOML file at the given path.
+ */
+export async function importPreferences(inputPath: string): Promise<AppPreferences> {
+  return invoke<AppPreferences>('import_preferences', { inputPath });
+}
+
+export async function listLogRecords(query: LogViewerQuery): Promise<LogViewerPage> {
+  return invoke<LogViewerPage>('list_log_records', { query });
+}
+
+export async function getLogFileStatus(): Promise<LogFileStatus> {
+  return invoke<LogFileStatus>('get_log_file_status');
 }

@@ -1,22 +1,32 @@
 //! macOS-specific notification implementation using notify-rust.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
 
 use notify_rust::{set_application, Notification};
 
-fn set_app_identity(app: &AppHandle) -> Result<(), String> {
-    let app_id = if cfg!(debug_assertions) {
-        "com.apple.Terminal"
-    } else {
-        app.config().identifier.as_str()
-    };
+/// Ensures `set_application` is called at most once per process lifetime.
+/// The underlying library has a global lock that errors on repeated calls.
+/// In release mode, we skip this call entirely — the app bundle's identifier
+/// is automatically used by the notification system.
+static APP_IDENTITY_SET: AtomicBool = AtomicBool::new(false);
 
-    set_application(app_id).map_err(|error| {
-        let message = format!("set_application failed: {error}");
-        eprintln!("[notification:macos] {message}");
-        message
-    })
+fn set_app_identity(_app: &AppHandle) -> Result<(), String> {
+    // In release mode, the app runs as a proper .app bundle.
+    // notify_rust automatically uses the bundle identifier,
+    // and calling set_application can cause unwanted Terminal window activation.
+    if !cfg!(debug_assertions) {
+        return Ok(());
+    }
+
+    if APP_IDENTITY_SET.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    // Debug mode: use Terminal as a fallback since the app runs from CLI.
+    set_application("com.apple.Terminal")
+        .map_err(|error| format!("set_application failed: {error}"))
 }
 
 pub fn show_playback(
@@ -34,11 +44,9 @@ pub fn show_playback(
         notification.image_path(path);
     }
 
-    notification.show().map_err(|error| {
-        let message = format!("show playback failed: {error}");
-        eprintln!("[notification:macos] {message}");
-        message
-    })?;
+    notification
+        .show()
+        .map_err(|error| format!("show playback failed: {error}"))?;
 
     Ok(())
 }
@@ -50,11 +58,7 @@ pub fn show_download(app: &AppHandle, title: &str, body: &str) -> Result<(), Str
         .summary(title)
         .body(body)
         .show()
-        .map_err(|error| {
-            let message = format!("show download failed: {error}");
-            eprintln!("[notification:macos] {message}");
-            message
-        })?;
+        .map_err(|error| format!("show download failed: {error}"))?;
 
     Ok(())
 }
@@ -66,12 +70,6 @@ pub fn show_test(app: &AppHandle) -> Result<(), String> {
         .summary("测试通知")
         .body("塞壬音乐下载器通知功能正常。")
         .show()
-        .map_err(|error| {
-            let message = format!("show test failed: {error}");
-            eprintln!("[notification:macos] {message}");
-            message
-        })?;
-
-    eprintln!("[notification:macos] test notification delivered");
+        .map_err(|error| format!("show test failed: {error}"))?;
     Ok(())
 }

@@ -7,6 +7,7 @@ mod desktop;
 mod macos;
 
 use crate::app_state::AppState;
+use crate::logging::{LogLevel, LogPayload};
 use crate::player::state::PlayerState;
 use siren_core::download::model::{DownloadJobKind, DownloadJobSnapshot, DownloadJobStatus};
 use std::sync::Mutex;
@@ -23,7 +24,7 @@ static LAST_NOTIFIED_SONG: Mutex<Option<String>> = Mutex::new(None);
 /// - Album (partially failed): "Album Name" / "专辑下载完成（N 首成功，M 首失败）"
 pub fn notify_download_completed(app: &AppHandle, job: &DownloadJobSnapshot) {
     let state = app.state::<AppState>();
-    let prefs = state.notification_preferences();
+    let prefs = state.preferences();
     if !prefs.notify_on_download_complete {
         return;
     }
@@ -51,19 +52,30 @@ pub fn notify_download_completed(app: &AppHandle, job: &DownloadJobSnapshot) {
         }
     };
 
-    eprintln!(
-        "[notification] download: title=\"{}\" body=\"{}\" kind={:?} status={:?}",
-        title, body, job.kind, job.status
-    );
-
     #[cfg(target_os = "macos")]
     if let Err(error) = macos::show_download(app, &title, &body) {
-        eprintln!("[notification] Failed to show download notification: {error}");
+        state.log_center.record(
+            LogPayload::new(
+                LogLevel::Warn,
+                "notification",
+                "notification.download_delivery_failed",
+                "Failed to show download notification",
+            )
+            .details(error.clone()),
+        );
     }
 
     #[cfg(not(target_os = "macos"))]
     if let Err(error) = desktop::show_download(app, title, body) {
-        eprintln!("[notification] Failed to show download notification: {error}");
+        state.log_center.record(
+            LogPayload::new(
+                LogLevel::Warn,
+                "notification",
+                "notification.download_delivery_failed",
+                "Failed to show download notification",
+            )
+            .details(error.clone()),
+        );
     }
 }
 
@@ -73,7 +85,7 @@ pub fn notify_download_completed(app: &AppHandle, job: &DownloadJobSnapshot) {
 /// Deduplicates by song CID to avoid repeated notifications for the same track.
 pub fn notify_playback_changed(app: &AppHandle, player_state: &PlayerState) {
     let app_state = app.state::<AppState>();
-    let prefs = app_state.notification_preferences();
+    let prefs = app_state.preferences();
     if !prefs.notify_on_playback_change {
         return;
     }
@@ -100,11 +112,6 @@ pub fn notify_playback_changed(app: &AppHandle, player_state: &PlayerState) {
     };
     let cover_url = player_state.cover_url.clone();
 
-    eprintln!(
-        "[notification] playback: title=\"{}\" body=\"{}\" cover_url={:?}",
-        title, body, cover_url
-    );
-
     let app_for_task = app.clone();
     let song_cid_for_task = song_cid.clone();
 
@@ -115,15 +122,40 @@ pub fn notify_playback_changed(app: &AppHandle, player_state: &PlayerState) {
             None
         };
 
-        #[cfg(target_os = "macos")]
-        if let Err(error) = macos::show_playback(&app_for_task, &title, &body, cover_path.as_ref())
+        let Some(state) = app_for_task.try_state::<AppState>() else {
+            return;
+        };
+        let current_state = state.player.get_state();
+        if current_state.song_cid.as_deref() != Some(song_cid_for_task.as_str())
+            || !current_state.is_playing
         {
-            eprintln!("[notification] Failed to show playback notification: {error}");
+            return;
+        }
+
+        #[cfg(target_os = "macos")]
+        if let Err(error) = macos::show_playback(&app_for_task, &title, &body, cover_path.as_ref()) {
+            state.log_center.record(
+                LogPayload::new(
+                    LogLevel::Warn,
+                    "notification",
+                    "notification.playback_delivery_failed",
+                    "Failed to show playback notification",
+                )
+                .details(error.clone()),
+            );
         }
 
         #[cfg(not(target_os = "macos"))]
         if let Err(error) = desktop::show_playback(&app_for_task, title, body, cover_path) {
-            eprintln!("[notification] Failed to show playback notification: {error}");
+            state.log_center.record(
+                LogPayload::new(
+                    LogLevel::Warn,
+                    "notification",
+                    "notification.playback_delivery_failed",
+                    "Failed to show playback notification",
+                )
+                .details(error.clone()),
+            );
         }
 
         if let Ok(mut last) = LAST_NOTIFIED_SONG.lock() {
@@ -134,15 +166,41 @@ pub fn notify_playback_changed(app: &AppHandle, player_state: &PlayerState) {
 
 /// Send a test notification to verify the notification pipeline is working.
 pub fn notify_test(app: AppHandle) -> Result<(), String> {
-    eprintln!("[notification] send_test_notification called");
-
     #[cfg(target_os = "macos")]
     {
-        macos::show_test(&app)
+        let result = macos::show_test(&app);
+        if let Err(error) = &result {
+            if let Some(state) = app.try_state::<AppState>() {
+                state.log_center.record(
+                    LogPayload::new(
+                        LogLevel::Warn,
+                        "notification",
+                        "notification.test_delivery_failed",
+                        "Failed to show test notification",
+                    )
+                    .details(error.clone()),
+                );
+            }
+        }
+        result
     }
 
     #[cfg(not(target_os = "macos"))]
     {
-        desktop::show_test(&app)
+        let result = desktop::show_test(&app);
+        if let Err(error) = &result {
+            if let Some(state) = app.try_state::<AppState>() {
+                state.log_center.record(
+                    LogPayload::new(
+                        LogLevel::Warn,
+                        "notification",
+                        "notification.test_delivery_failed",
+                        "Failed to show test notification",
+                    )
+                    .details(error.clone()),
+                );
+            }
+        }
+        result
     }
 }

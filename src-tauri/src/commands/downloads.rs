@@ -9,8 +9,6 @@ use crate::downloads::events::{emit_download_job_updated, emit_download_manager_
 use siren_core::download::model::{
     CreateDownloadJobRequest, DownloadJobSnapshot, DownloadManagerSnapshot,
 };
-use siren_core::{download_song as download_song_file, MetaOverride};
-use std::path::Path;
 use tauri::{AppHandle, State};
 
 fn emit_download_state(app: &AppHandle, manager_snapshot: &DownloadManagerSnapshot) {
@@ -18,50 +16,6 @@ fn emit_download_state(app: &AppHandle, manager_snapshot: &DownloadManagerSnapsh
     for job in &manager_snapshot.jobs {
         emit_download_job_updated(app, job);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Legacy single-song download commands (maintained for backward compatibility)
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub async fn download_song(
-    state: State<'_, AppState>,
-    song_cid: String,
-    output_dir: String,
-    format: String,
-    download_lyrics: bool,
-) -> Result<String, String> {
-    let song = state
-        .api
-        .get_song_detail(&song_cid)
-        .await
-        .map_err(|e| e.to_string())?;
-    let album = state
-        .api
-        .get_album_detail(&song.album_cid)
-        .await
-        .map_err(|e| e.to_string())?;
-    let output_format = crate::app_state::parse_output_format(&format)?;
-    let output_path = download_song_file(
-        state.api.as_ref(),
-        &song,
-        &album,
-        Path::new(&output_dir),
-        output_format,
-        download_lyrics,
-        &MetaOverride {
-            album_name: String::new(),
-            artists: Vec::new(),
-            album_artists: Vec::new(),
-        },
-        None,
-        |_| {},
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-
-    Ok(output_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -81,10 +35,18 @@ pub async fn create_download_job(
     request: CreateDownloadJobRequest,
 ) -> Result<DownloadJobSnapshot, String> {
     let api = state.api.clone();
+    let preferences = state.preferences();
+    let normalized_request = CreateDownloadJobRequest {
+        options: siren_core::download::model::DownloadOptions {
+            output_dir: preferences.output_dir,
+            ..request.options
+        },
+        ..request
+    };
     let (job_snapshot, manager_snapshot) = {
         let mut service = state.download_service.lock().await;
         let job_snapshot = service
-            .create_job(&api, request)
+            .create_job(&api, normalized_request)
             .await
             .map_err(|e| e.to_string())?;
         let manager_snapshot = service.manager_snapshot();

@@ -18,7 +18,7 @@
   --surface-window: color-mix(in srgb, var(--bg-primary) 100%, transparent);
   --surface-sidebar: color-mix(in srgb, var(--bg-secondary) 92%, white 8%);
   --surface-workspace: color-mix(in srgb, var(--bg-primary) 96%, white 4%);
-  --surface-sheet: color-mix(in srgb, var(--bg-secondary) 76%, white 24%);
+  --surface-sheet: color-mix(in srgb, var(--bg-secondary) 76%, transparent 24%);
   --surface-dock: color-mix(in srgb, var(--player-shell-bg) 88%, white 12%);
   --surface-flyout: color-mix(in srgb, var(--player-shell-bg) 80%, transparent);
   --surface-state: rgba(var(--accent-rgb), 0.08);
@@ -33,6 +33,52 @@
   --ease-linear: linear;
   --lift-subtle: translateY(-1px);
   --lift-rest: translateY(0);
+
+  /* shadcn-svelte theme tokens */
+  --background: var(--bg-primary);
+  --foreground: var(--text-primary);
+  --popover: var(--bg-secondary);
+  --popover-foreground: var(--text-primary);
+  --card: var(--bg-secondary);
+  --card-foreground: var(--text-primary);
+  --primary: var(--accent);
+  --primary-foreground: white;
+  --secondary: var(--bg-tertiary);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--bg-tertiary);
+  --muted-foreground: var(--text-secondary);
+  --destructive: #ff3b30;
+  --destructive-foreground: white;
+  --input: var(--bg-tertiary);
+  --ring: rgba(var(--accent-rgb), 0.3);
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--surface-state);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 /* 亮色模式配色 */

@@ -150,10 +150,10 @@
     font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
-    margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    margin-bottom: 2px;
   }
 
   .album-artists {

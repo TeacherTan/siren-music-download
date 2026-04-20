@@ -23,7 +23,7 @@
 
 当前 CI 执行内容：
 
-- `npm run check`
+- `bun run check`
 - `cargo check --workspace`
 - `cargo test --workspace`
 

@@ -1,5 +1,5 @@
 use crate::player::backend::PlaybackBackend;
-use crate::player::stream::{AudioFormat, SampleBuffer};
+use crate::player::stream::{AudioFormat, PlaybackErrorHandler, SampleBuffer};
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, Stream, SupportedStreamConfig};
@@ -66,6 +66,7 @@ impl PlaybackBackend for CpalBackend {
         volume: Arc<Mutex<f64>>,
         progress_callback: Arc<dyn Fn(f64, f64) + Send + Sync>,
         finish_callback: Arc<dyn Fn() + Send + Sync>,
+        error_handler: PlaybackErrorHandler,
     ) -> Result<()> {
         self.stop()?;
 
@@ -89,6 +90,9 @@ impl PlaybackBackend for CpalBackend {
         let finish_for_callback = Arc::clone(&finish_fired);
         let progress_for_callback = Arc::clone(&progress_callback);
         let finish_callback_for_stream = Arc::clone(&finish_callback);
+        let error_handler_for_callback = Arc::clone(&error_handler);
+        let error_handler_for_stream = Arc::clone(&error_handler);
+        let buffer_error_reported = Arc::new(AtomicBool::new(false));
 
         let stream = device.build_output_stream(
             &stream_config,
@@ -111,7 +115,9 @@ impl PlaybackBackend for CpalBackend {
                 }
 
                 if let Some(error) = status.error {
-                    eprintln!("[cpal] playback buffer error: {error}");
+                    if !buffer_error_reported.swap(true, Ordering::SeqCst) {
+                        error_handler_for_callback(error);
+                    }
                 }
 
                 let mut rendered = frames_for_callback.lock().unwrap();
@@ -124,7 +130,7 @@ impl PlaybackBackend for CpalBackend {
                 }
             },
             move |err| {
-                eprintln!("[cpal] output stream error: {err}");
+                error_handler_for_stream(err.to_string());
             },
             None,
         )?;

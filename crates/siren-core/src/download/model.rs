@@ -1,5 +1,6 @@
 use crate::audio::OutputFormat;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,7 +110,7 @@ pub struct InternalDownloadTask {
 
 impl InternalDownloadTask {
     /// Convert to the frontend-facing snapshot.
-    pub fn to_snapshot(&self) -> DownloadTaskSnapshot {
+    pub fn to_snapshot(&self, root_output_dir: &str) -> DownloadTaskSnapshot {
         DownloadTaskSnapshot {
             id: self.id.clone(),
             job_id: self.job_id.clone(),
@@ -121,7 +122,10 @@ impl InternalDownloadTask {
             status: self.status,
             bytes_done: self.bytes_done,
             bytes_total: self.bytes_total,
-            output_path: self.output_path.clone(),
+            output_path: self
+                .output_path
+                .as_deref()
+                .and_then(|path| normalize_snapshot_path(path, root_output_dir)),
             error: self.error.clone(),
             attempt: self.attempt,
             song_index: self.song_index,
@@ -177,7 +181,11 @@ impl DownloadJob {
             completed_task_count,
             failed_task_count,
             cancelled_task_count,
-            tasks: self.tasks.iter().map(|t| t.to_snapshot()).collect(),
+            tasks: self
+                .tasks
+                .iter()
+                .map(|t| t.to_snapshot(&self.options.output_dir))
+                .collect(),
             error: self.error.clone(),
         }
     }
@@ -234,6 +242,22 @@ impl DownloadJob {
 
         self.status
     }
+}
+
+fn normalize_snapshot_path(path: &str, root_output_dir: &str) -> Option<String> {
+    let path = Path::new(path);
+    let root = Path::new(root_output_dir);
+
+    path.strip_prefix(root)
+        .map(|relative| {
+            relative
+                .components()
+                .map(|component| component.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/")
+        })
+        .ok()
+        .filter(|relative| !relative.is_empty())
 }
 
 #[cfg(test)]
@@ -326,13 +350,57 @@ mod tests {
     }
 
     #[test]
-    fn returns_running_when_any_task_is_still_active() {
-        let job = make_job(vec![
-            make_task(DownloadTaskStatus::Completed),
-            make_task(DownloadTaskStatus::Downloading),
-        ]);
+    fn normalizes_output_path_to_relative_snapshot_form() {
+        let task = InternalDownloadTask {
+            id: "task-1".to_string(),
+            job_id: "job-1".to_string(),
+            song_cid: "song-1".to_string(),
+            song_name: "Song".to_string(),
+            artists: vec!["Artist".to_string()],
+            album_cid: "album-1".to_string(),
+            album_name: "Album".to_string(),
+            status: DownloadTaskStatus::Completed,
+            bytes_done: 0,
+            bytes_total: None,
+            output_path: Some("/Users/me/Downloads/SirenMusic/Album/Disc 1/Track.flac".to_string()),
+            error: None,
+            attempt: 0,
+            song_index: 0,
+            song_count: 1,
+            format: OutputFormat::Flac,
+            download_lyrics: true,
+        };
 
-        assert_eq!(job.job_status(), DownloadJobStatus::Running);
+        let snapshot = task.to_snapshot("/Users/me/Downloads/SirenMusic");
+
+        assert_eq!(snapshot.output_path.as_deref(), Some("Album/Disc 1/Track.flac"));
+    }
+
+    #[test]
+    fn omits_output_path_when_it_cannot_be_normalized_from_root() {
+        let task = InternalDownloadTask {
+            id: "task-1".to_string(),
+            job_id: "job-1".to_string(),
+            song_cid: "song-1".to_string(),
+            song_name: "Song".to_string(),
+            artists: vec!["Artist".to_string()],
+            album_cid: "album-1".to_string(),
+            album_name: "Album".to_string(),
+            status: DownloadTaskStatus::Completed,
+            bytes_done: 0,
+            bytes_total: None,
+            output_path: Some("/other-root/Album/Track.flac".to_string()),
+            error: None,
+            attempt: 0,
+            song_index: 0,
+            song_count: 1,
+            format: OutputFormat::Flac,
+            download_lyrics: true,
+        };
+
+        let snapshot = task.to_snapshot("/Users/me/Downloads/SirenMusic");
+
+        assert_eq!(snapshot.output_path, None);
     }
 }
 

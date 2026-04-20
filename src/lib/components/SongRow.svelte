@@ -39,6 +39,19 @@
 
   const showEmphasis = $derived.by(() => isPlaying || isHovered || isFocused || isSelected);
   const showPlayIndicator = $derived.by(() => isPlaying || isHovered || isFocused);
+  const showDownloadedBadge = $derived.by(() => song.download?.isDownloaded ?? false);
+  const downloadedBadgeLabel = $derived.by(() => {
+    switch (song.download?.downloadStatus) {
+      case 'verified':
+        return '已校验';
+      case 'unverifiable':
+        return '已下载';
+      case 'partial':
+        return '部分下载';
+      default:
+        return '已下载';
+    }
+  });
   const isBusy = $derived.by(() => downloadState !== 'idle');
   const isDownloadDisabled = $derived.by(() => isBusy || downloadDisabled || selectionMode);
   const downloadButtonLabel = $derived.by(() => {
@@ -193,6 +206,9 @@
     >
       {(song.artists || []).join(', ')}
     </motion.div>
+    {#if showDownloadedBadge}
+      <span class="song-download-badge">{downloadedBadgeLabel}</span>
+    {/if}
   </div>
   <div class="song-actions">
     <motion.div
@@ -305,6 +321,19 @@
   .song-info {
     flex: 1;
     min-width: 0;
+  }
+
+  .song-download-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.12);
   }
 
   .song-actions {

@@ -1,4 +1,4 @@
-use crate::player::stream::{AudioFormat, SampleBuffer};
+use crate::player::stream::{AudioFormat, PlaybackErrorHandler, SampleBuffer};
 use anyhow::Result;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -14,6 +14,7 @@ pub trait PlaybackBackend: Send {
         volume: Arc<Mutex<f64>>,
         progress_callback: Arc<dyn Fn(f64, f64) + Send + Sync>,
         finish_callback: Arc<dyn Fn() + Send + Sync>,
+        error_handler: PlaybackErrorHandler,
     ) -> Result<()>;
 
     fn pause(&mut self) -> Result<()>;

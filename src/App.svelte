@@ -30,11 +30,14 @@
     retryDownloadJob,
     retryDownloadTask,
     clearDownloadHistory,
-    getNotificationPreferences,
-    setNotificationPreferences,
     sendTestNotification,
+    getPreferences,
+    setPreferences,
+    getLocalInventorySnapshot,
+    listLogRecords,
+    getLogFileStatus,
   } from "$lib/api";
-  import { clearCache } from "$lib/cache";
+  import { clearCache, clearCachedByPrefix } from "$lib/cache";
   import type {
     Album,
     AlbumDetail,
@@ -48,7 +51,13 @@
     DownloadTaskProgressEvent,
     CreateDownloadJobRequest,
     DownloadTaskSnapshot,
-    NotificationPreferences,
+    AppPreferences,
+    LocalInventorySnapshot,
+    AppErrorEvent,
+    LogLevel,
+    LogFileKind,
+    LogFileStatus,
+    LogViewerRecord,
   } from "$lib/types";
   import { applyThemePalette, DEFAULT_THEME_PALETTE } from "$lib/theme";
   import { motionStyles } from "$lib/actions/motionStyles";
@@ -84,9 +93,6 @@
   const ALBUM_STAGE_BASE_VIEWPORT_RATIO = 1 / 3;
   const ALBUM_STAGE_COLLAPSE_SCROLL_RANGE = 260;
   const ALBUM_STAGE_SOLIDIFY_SCROLL_RANGE = 220;
-  const DOWNLOAD_LYRICS_PREF_KEY = "siren:download-lyrics-sidecar";
-  const NOTIFY_DOWNLOAD_PREF_KEY = "siren:notify-download";
-  const NOTIFY_PLAYBACK_PREF_KEY = "siren:notify-playback";
 
   const delay = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
@@ -675,7 +681,6 @@
 
   function hasCurrentDownloadOptions(job: DownloadJobSnapshot): boolean {
     return (
-      job.options.outputDir === outputDir &&
       job.options.format === format &&
       job.options.downloadLyrics === downloadLyrics
     );
@@ -728,11 +733,9 @@
     return (
       downloadManager.jobs.find((job) => {
         if (job.kind !== "album") return false;
-        const matchesAlbum = job.tasks.some(
-          (task) => task.albumCid === albumCid,
-        );
-        if (!matchesAlbum) return false;
-        return job.status === "queued" || job.status === "running";
+        if (job.status !== "queued" && job.status !== "running") return false;
+        if (!hasCurrentDownloadOptions(job)) return false;
+        return job.tasks.some((task) => task.albumCid === albumCid);
       }) ?? null
     );
   }
@@ -785,6 +788,7 @@
       downloadManager.jobs.find(
         (job) =>
           (job.status === "queued" || job.status === "running") &&
+          hasCurrentDownloadOptions(job) &&
           job.tasks.some((task) => task.songCid === songCid),
       ) ?? null
     );
@@ -806,7 +810,7 @@
         songCids: [songCid],
         albumCid: null,
         options: {
-          outputDir,
+          outputDir: "",
           format,
           downloadLyrics,
         },
@@ -855,7 +859,7 @@
         songCids: [],
         albumCid: album.cid,
         options: {
-          outputDir,
+          outputDir: "",
           format,
           downloadLyrics,
         },
@@ -891,7 +895,7 @@
         songCids,
         albumCid: null,
         options: {
-          outputDir,
+          outputDir: "",
           format,
           downloadLyrics,
         },
@@ -1344,6 +1348,37 @@
     })();
   });
 
+  // Auto-save preferences via unified preferences API (after initialization)
+  $effect(() => {
+    const _fmt = format;
+    if (!prefsReady) return;
+    void savePreferences();
+  });
+
+  $effect(() => {
+    const _lyrics = downloadLyrics;
+    if (!prefsReady) return;
+    void savePreferences();
+  });
+
+  $effect(() => {
+    const _notif = notifyOnDownloadComplete;
+    if (!prefsReady) return;
+    void savePreferences();
+  });
+
+  $effect(() => {
+    const _playback = notifyOnPlaybackChange;
+    if (!prefsReady) return;
+    void savePreferences();
+  });
+
+  $effect(() => {
+    const _logLevel = logLevel;
+    if (!prefsReady) return;
+    void savePreferences();
+  });
+
   $effect(() => {
     if (!albumStageEl) return;
 
@@ -1361,41 +1396,8 @@
   });
 
   $effect(() => {
-    if (typeof window === "undefined" || !downloadLyricsPrefReady) return;
-
-    try {
-      window.localStorage.setItem(
-        DOWNLOAD_LYRICS_PREF_KEY,
-        downloadLyrics ? "1" : "0",
-      );
-    } catch {
-      // ignore storage failures
-    }
-  });
-
-  $effect(() => {
-    if (typeof window === "undefined" || !notifyPrefReady) return;
-
-    try {
-      window.localStorage.setItem(
-        NOTIFY_DOWNLOAD_PREF_KEY,
-        notifyOnDownloadComplete ? "1" : "0",
-      );
-      window.localStorage.setItem(
-        NOTIFY_PLAYBACK_PREF_KEY,
-        notifyOnPlaybackChange ? "1" : "0",
-      );
-    } catch {
-      // ignore storage failures
-    }
-
-    const preferences: NotificationPreferences = {
-      notifyOnDownloadComplete,
-      notifyOnPlaybackChange,
-    };
-    void setNotificationPreferences(preferences).catch(() => {
-      // ignore backend sync failures
-    });
+    if (!settingsOpen) return;
+    void refreshLogs(logFileKind);
   });
 
   onMount(() => {
@@ -1411,6 +1413,8 @@
     let unlistenDownloadManager: (() => void) | null = null;
     let unlistenDownloadJob: (() => void) | null = null;
     let unlistenDownloadProgress: (() => void) | null = null;
+    let unlistenLocalInventory: (() => void) | null = null;
+    let unlistenAppError: (() => void) | null = null;
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     function updateReducedMotionPreference() {
@@ -1424,39 +1428,39 @@
 
     async function initialize() {
       loadingAlbums = true;
-      try {
-        const backendPreferences = await getNotificationPreferences();
-        notifyOnDownloadComplete = backendPreferences.notifyOnDownloadComplete;
-        notifyOnPlaybackChange = backendPreferences.notifyOnPlaybackChange;
 
-        const stored = window.localStorage.getItem(DOWNLOAD_LYRICS_PREF_KEY);
-        if (stored !== null) {
-          downloadLyrics = stored === "1";
-        }
-        const storedDownload = window.localStorage.getItem(
-          NOTIFY_DOWNLOAD_PREF_KEY,
-        );
-        if (storedDownload !== null) {
-          notifyOnDownloadComplete = storedDownload === "1";
-        }
-        const storedPlayback = window.localStorage.getItem(
-          NOTIFY_PLAYBACK_PREF_KEY,
-        );
-        if (storedPlayback !== null) {
-          notifyOnPlaybackChange = storedPlayback === "1";
-        }
+      // Load unified preferences from backend (non-blocking on failure)
+      try {
+        const prefs = await getPreferences();
+        outputDir = prefs.outputDir || outputDir;
+        format = prefs.outputFormat || format;
+        downloadLyrics = prefs.downloadLyrics;
+        notifyOnDownloadComplete = prefs.notifyOnDownloadComplete;
+        notifyOnPlaybackChange = prefs.notifyOnPlaybackChange;
+        logLevel = prefs.logLevel;
+        prefsReady = true;
       } catch {
-        // ignore storage failures
-      } finally {
-        downloadLyricsPrefReady = true;
-        notifyPrefReady = true;
+        prefsReady = true;
       }
 
       try {
-        [albums, outputDir] = await Promise.all([
+        localInventory = await getLocalInventorySnapshot();
+      } catch {
+        localInventory = null;
+      }
+
+      try {
+        // Load albums and get default output dir in parallel.
+        // outputDir from preferences takes precedence; getDefaultOutputDir() is only
+        // a fallback when preferences has no saved output dir.
+        const [albumsData, defaultDir] = await Promise.all([
           getAlbums(),
-          getDefaultOutputDir(),
+          outputDir ? Promise.resolve("") : getDefaultOutputDir(),
         ]);
+        if (defaultDir && !outputDir) {
+          outputDir = defaultDir;
+        }
+        albums = albumsData;
         // Auto-select the first album on startup
         if (albums.length > 0) {
           await handleSelectAlbum(albums[0]);
@@ -1534,11 +1538,58 @@
         },
       );
 
+      unlistenAppError = await listen<AppErrorEvent>(
+        "app-error-recorded",
+        (event) => {
+          handleAppErrorEvent(event.payload);
+        },
+      );
+
+      unlistenLocalInventory = await listen<LocalInventorySnapshot>(
+        "local-inventory-state-changed",
+        async (event) => {
+          const previousVersion = localInventory?.inventoryVersion ?? null;
+          localInventory = event.payload;
+          const inventoryVersionChanged =
+            previousVersion !== event.payload.inventoryVersion;
+
+          if (inventoryVersionChanged) {
+            invalidateInventoryCaches();
+          }
+
+          if (event.payload.status === "completed" && inventoryVersionChanged) {
+            const currentSelectedAlbumCid = selectedAlbumCid;
+            if (!currentSelectedAlbumCid) {
+              return;
+            }
+
+            try {
+              const detail = await getAlbumDetail(
+                currentSelectedAlbumCid,
+                event.payload.inventoryVersion,
+              );
+              if (selectedAlbumCid !== currentSelectedAlbumCid) {
+                return;
+              }
+              selectedAlbum = detail;
+            } catch {
+              // Keep current UI state if refresh fails.
+            }
+          }
+        },
+      );
+
       // Initialize download manager state
       try {
         downloadManager = await listDownloadJobs();
       } catch {
         // Download manager not available
+      }
+
+      try {
+        await refreshLogs("session");
+      } catch {
+        // Keep settings usable if logs are unavailable.
       }
 
       try {
@@ -1566,6 +1617,8 @@
       unlistenDownloadManager?.();
       unlistenDownloadJob?.();
       unlistenDownloadProgress?.();
+      unlistenLocalInventory?.();
+      unlistenAppError?.();
       mediaQuery.removeEventListener("change", updateReducedMotionPreference);
       window.removeEventListener("resize", handleWindowResize);
     };
@@ -1634,7 +1687,10 @@
 
     const startTime = Date.now();
     try {
-      const detail = await getAlbumDetail(album.cid);
+      const detail = await getAlbumDetail(
+        album.cid,
+        localInventory?.inventoryVersion ?? null,
+      );
       if (requestSeq !== albumRequestSeq) return;
       const artworkAspectRatio = await preloadAlbumArtwork(detail);
       if (requestSeq !== albumRequestSeq) return;
@@ -1722,19 +1778,58 @@
   let settingsOpen = $state(false);
   let isClearingAudioCache = $state(false);
   let downloadLyrics = $state(true);
-  let downloadLyricsPrefReady = $state(false);
   let notifyOnDownloadComplete = $state(true);
   let notifyOnPlaybackChange = $state(true);
-  let notifyPrefReady = $state(false);
+  let logLevel = $state<LogLevel>("error");
+  let logFileKind = $state<LogFileKind>("session");
+  let logRecords = $state<LogViewerRecord[]>([]);
+  let logFileStatus = $state<LogFileStatus | null>(null);
+  let logViewerLoading = $state(false);
+  let logViewerError = $state("");
   let isSendingTestNotification = $state(false);
   let isFormatHovered = $state(false);
   let isFormatFocused = $state(false);
   let isOutputDirHovered = $state(false);
   let isOutputDirFocused = $state(false);
+  let prefsReady = $state(false);
+  let localInventory = $state<LocalInventorySnapshot | null>(null);
+
+  async function refreshLogs(kind = logFileKind) {
+    logViewerLoading = true;
+    logViewerError = "";
+    try {
+      const [page, status] = await Promise.all([
+        listLogRecords({ kind, limit: 100 }),
+        getLogFileStatus(),
+      ]);
+      logRecords = page.records;
+      logFileStatus = status;
+      logFileKind = kind;
+    } catch (error) {
+      logViewerError = error instanceof Error ? error.message : String(error);
+    } finally {
+      logViewerLoading = false;
+    }
+  }
+
+  function handleAppErrorEvent(event: AppErrorEvent) {
+    notifyError(event.message);
+    if (settingsOpen) {
+      void refreshLogs(logFileKind);
+    }
+  }
+
+  function invalidateInventoryCaches() {
+    clearCachedByPrefix("album_detail:");
+    clearCachedByPrefix("song_detail:");
+  }
 
   async function handleSelectDirectory() {
     const dir = await selectDirectory(outputDir);
-    if (dir) outputDir = dir;
+    if (dir) {
+      outputDir = dir;
+      void savePreferences();
+    }
   }
 
   async function handleClearAudioCache() {
@@ -1766,6 +1861,29 @@
       notifyError(`发送测试通知失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       isSendingTestNotification = false;
+    }
+  }
+
+  async function savePreferences() {
+    const prefs: AppPreferences = {
+      outputFormat: format,
+      outputDir,
+      downloadLyrics,
+      notifyOnDownloadComplete,
+      notifyOnPlaybackChange,
+      logLevel,
+    };
+    try {
+      const updated = await setPreferences(prefs);
+      // Sync from returned values (backend may have normalized them)
+      format = updated.outputFormat;
+      outputDir = updated.outputDir;
+      downloadLyrics = updated.downloadLyrics;
+      notifyOnDownloadComplete = updated.notifyOnDownloadComplete;
+      notifyOnPlaybackChange = updated.notifyOnPlaybackChange;
+      logLevel = updated.logLevel;
+    } catch (e) {
+      console.error("[ERROR] Failed to save preferences:", e);
     }
   }
 
@@ -2217,37 +2335,53 @@
     clearCache();
 
     // Reload current album if selected
-    if (selectedAlbumCid) {
-      const currentAlbumCid = selectedAlbumCid;
-      loadingDetail = true;
-      if (!selectedAlbum) {
-        armDetailSkeleton();
-      } else {
-        clearDetailSkeleton();
-      }
-      try {
-        const detail = await getAlbumDetail(currentAlbumCid);
-        if (requestSeq === albumRequestSeq) {
-          const artworkAspectRatio = await preloadAlbumArtwork(detail);
-          if (requestSeq === albumRequestSeq) {
-            setAlbumStageAspectRatio(artworkAspectRatio);
+    try {
+      const nextAlbums = await getAlbums();
+      albums = nextAlbums;
+      if (selectedAlbumCid) {
+        const currentAlbumCid = selectedAlbumCid;
+        loadingDetail = true;
+        if (!selectedAlbum) {
+          armDetailSkeleton();
+        } else {
+          clearDetailSkeleton();
+        }
+        const refreshedAlbum = nextAlbums.find((album) => album.cid === currentAlbumCid);
+        if (refreshedAlbum) {
+          try {
+            const detail = await getAlbumDetail(
+              currentAlbumCid,
+              localInventory?.inventoryVersion ?? null,
+            );
+            if (requestSeq === albumRequestSeq) {
+              const artworkAspectRatio = await preloadAlbumArtwork(detail);
+              if (requestSeq === albumRequestSeq) {
+                setAlbumStageAspectRatio(artworkAspectRatio);
+              }
+            }
+            if (requestSeq === albumRequestSeq) {
+              selectedAlbum = detail;
+              await tick();
+              resetContentScroll();
+            }
+          } catch (e) {
+            if (requestSeq === albumRequestSeq) {
+              console.error("[ERROR] Failed to reload album:", e);
+            }
+          } finally {
+            if (requestSeq === albumRequestSeq) {
+              clearDetailSkeleton();
+              loadingDetail = false;
+            }
           }
-        }
-        if (requestSeq === albumRequestSeq) {
-          selectedAlbum = detail;
-          await tick();
-          resetContentScroll();
-        }
-      } catch (e) {
-        if (requestSeq === albumRequestSeq) {
-          console.error("[ERROR] Failed to reload album:", e);
-        }
-      } finally {
-        if (requestSeq === albumRequestSeq) {
+        } else if (requestSeq === albumRequestSeq) {
+          selectedAlbum = null;
           clearDetailSkeleton();
           loadingDetail = false;
         }
       }
+    } catch (e) {
+      console.error("[ERROR] Failed to refresh album list:", e);
     }
 
     // Brief delay to show spinning state
@@ -2849,11 +2983,18 @@
     bind:downloadLyrics
     bind:notifyOnDownloadComplete
     bind:notifyOnPlaybackChange
+    bind:logLevel
+    {logFileKind}
+    {logRecords}
+    {logFileStatus}
+    {logViewerLoading}
+    {logViewerError}
     {isSendingTestNotification}
     {isClearingAudioCache}
     onSelectDirectory={handleSelectDirectory}
     onSendTestNotification={handleSendTestNotification}
     onClearAudioCache={handleClearAudioCache}
+    onChangeLogFileKind={refreshLogs}
   />
 
   <DownloadTasksSheet

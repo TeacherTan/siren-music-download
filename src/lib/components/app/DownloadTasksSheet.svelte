@@ -80,7 +80,7 @@
           {@const kindLabel = getJobKindLabel(job)}
           {@const summaryLabel = getJobSummaryLabel(job)}
           {@const errorSummary = getJobErrorSummary(job)}
-          <section class="rounded-[22px] border border-white/40 bg-white/28 p-4">
+          <section class="rounded-[22px] border border-white/[0.40] bg-white/[0.28] p-4">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 space-y-1">
                 <div class="flex items-center gap-2">
@@ -124,7 +124,7 @@
             <div class="mt-3 space-y-2">
               {#each job.tasks as task (task.id)}
                 {@const taskError = getTaskErrorLabel(task)}
-                <div class="flex items-start justify-between gap-3 rounded-2xl border border-white/30 bg-white/22 px-3 py-2">
+                <div class="flex items-start justify-between gap-3 rounded-2xl border border-white/[0.30] bg-white/[0.22] px-3 py-2">
                   <div class="min-w-0">
                     <p class="truncate text-xs font-medium">{task.songName}</p>
                     {#if taskError}

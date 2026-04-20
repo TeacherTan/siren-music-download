@@ -53,6 +53,17 @@ export function clearCache(): void {
 }
 
 /**
+ * Remove all cached entries whose key starts with the given prefix.
+ */
+export function clearCachedByPrefix(prefix: string): void {
+  for (const key of cache.keys()) {
+    if (key.startsWith(prefix)) {
+      cache.delete(key);
+    }
+  }
+}
+
+/**
  * Get cache statistics (for debugging/UI).
  */
 export function getCacheStats(): { size: number; oldestTimestamp: number | null } {

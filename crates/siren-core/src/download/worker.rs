@@ -333,6 +333,28 @@ impl InternalDownloadTask {
     }
 }
 
+fn sanitized_error_details(error: &anyhow::Error) -> Option<String> {
+    let message = error.to_string();
+    if message.is_empty() {
+        return None;
+    }
+
+    let normalized = message.replace('\\', "/");
+    let looks_like_path = normalized.starts_with('/') || normalized.contains(":/");
+    if looks_like_path {
+        return Path::new(&normalized)
+            .file_name()
+            .map(|value| value.to_string_lossy().to_string())
+            .filter(|value| !value.is_empty());
+    }
+
+    if normalized.contains('/') {
+        return None;
+    }
+
+    Some(normalized)
+}
+
 fn make_error(
     code: DownloadErrorCode,
     message: &str,
@@ -343,7 +365,7 @@ fn make_error(
         code,
         message: message.to_string(),
         retryable,
-        details: Some(e.to_string()),
+        details: sanitized_error_details(&e),
     }
 }
 

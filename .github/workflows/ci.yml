@@ -18,15 +18,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: package-lock.json
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -35,7 +31,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run frontend checks
-        run: npm run check
+        run: bun run check
 
       - name: Run Rust workspace checks
         run: cargo check --workspace

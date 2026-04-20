@@ -1,3 +1,4 @@
+use crate::local_inventory::TrackDownloadBadge;
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -53,6 +54,9 @@ pub struct SongEntry {
     /// 歌曲艺术家列表。
     #[serde(alias = "artistes")]
     pub artists: Vec<String>,
+    /// 当前 active outputDir 下的本地下载标记。
+    #[serde(default)]
+    pub download: TrackDownloadBadge,
 }
 
 /// `GET /api/song/{cid}` 返回的歌曲详情。
@@ -79,6 +83,9 @@ pub struct SongDetail {
     pub mv_cover_url: Option<String>,
     /// 歌曲艺术家列表。
     pub artists: Vec<String>,
+    /// 当前 active outputDir 下的本地下载标记。
+    #[serde(default)]
+    pub download: TrackDownloadBadge,
 }
 
 #[derive(Debug, Deserialize)]

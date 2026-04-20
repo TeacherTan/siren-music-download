@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use souvlaki::MediaControlEvent;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 /// Queue entry shared between the frontend and backend playback context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -297,6 +297,26 @@ impl AudioPlayer {
             emit_state_and_sync(&app_for_finish, &state_for_finish, &media_for_finish);
         });
 
+        let active_session = Arc::clone(&self.active_session_id);
+        let stop_flag = Arc::clone(&self.stop_flag);
+        let app_for_error = self.app.clone();
+        let error_handler = Arc::new(move |message: String| {
+            if stop_flag.load(Ordering::SeqCst) || active_session.load(Ordering::SeqCst) != session_id {
+                return;
+            }
+            if let Some(state) = app_for_error.try_state::<crate::app_state::AppState>() {
+                state.log_center.record(
+                    crate::logging::LogPayload::new(
+                        crate::logging::LogLevel::Error,
+                        "player",
+                        "player.output_stream_failed",
+                        "Audio output stream failed",
+                    )
+                    .details(message),
+                );
+            }
+        });
+
         self.backend
             .lock()
             .unwrap()
@@ -307,6 +327,7 @@ impl AudioPlayer {
                 Arc::clone(&self.volume),
                 progress_callback,
                 finish_callback,
+                error_handler,
             )
             .context("Failed to start audio backend")?;
 

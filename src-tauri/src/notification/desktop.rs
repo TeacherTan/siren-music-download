@@ -16,11 +16,9 @@ pub fn show_playback(
         builder = builder.icon(path);
     }
 
-    builder.show().map_err(|error| {
-        let message = error.to_string();
-        eprintln!("[notification:desktop] show playback failed: {message}");
-        message
-    })?;
+    builder
+        .show()
+        .map_err(|error| error.to_string())?;
 
     Ok(())
 }
@@ -31,11 +29,7 @@ pub fn show_download(app: &AppHandle, title: String, body: String) -> Result<(),
         .title(title)
         .body(body)
         .show()
-        .map_err(|error| {
-            let message = error.to_string();
-            eprintln!("[notification:desktop] show download failed: {message}");
-            message
-        })?;
+        .map_err(|error| error.to_string())?;
 
     Ok(())
 }
@@ -46,11 +40,7 @@ pub fn show_test(app: &AppHandle) -> Result<(), String> {
         .title("测试通知")
         .body("塞壬音乐下载器通知功能正常。")
         .show()
-        .map_err(|error| {
-            let message = error.to_string();
-            eprintln!("[notification:desktop] show test failed: {message}");
-            message
-        })?;
+        .map_err(|error| error.to_string())?;
 
     Ok(())
 }

@@ -144,12 +144,12 @@ async fn execution_loop(
                     })
                 })
                 .await
-                .unwrap_or_else(|e| {
+                .unwrap_or_else(|_| {
                     TaskExecutionResult::Failed(siren_core::download::model::DownloadErrorInfo {
                         code: siren_core::download::model::DownloadErrorCode::Internal,
                         message: "Write worker panicked".to_string(),
                         retryable: false,
-                        details: Some(e.to_string()),
+                        details: None,
                     })
                 });
 
