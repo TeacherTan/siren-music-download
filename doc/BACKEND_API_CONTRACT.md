@@ -35,7 +35,6 @@
 - `SongDetail`
 - `AlbumDetail`
 - `AppPreferences`
-- `NotificationPreferences`
 - `NotificationPermissionState`
 
 ## 类型字段定义
@@ -299,11 +298,6 @@
 - `songs: SongEntry[]`
 - `download: AlbumDownloadBadge`
 
-### `NotificationPreferences`
-
-- `notifyOnDownloadComplete: boolean`
-- `notifyOnPlaybackChange: boolean`
-
 ### `AppPreferences`
 
 应用偏好持久化到 `{app_data_dir}/preferences.toml`。
@@ -323,7 +317,37 @@
 - `prompt`
 - `prompt-with-rationale`
 
-## Commands
+### 权限分级与路径边界
+
+后端命令按权限面分为三类：
+
+1. **只读命令**：只读取远端内容或内存态，不接收本地文件系统路径参数。
+   - 例如：`get_albums`、`get_album_detail`、`get_song_detail`、`get_song_lyrics`、`get_player_state`
+2. **受限文件命令**：允许读写本地文件系统，但只应作用于当前受信工作目录或应用数据目录。
+   - 例如：下载落盘、本地盘点、偏好持久化
+3. **高风险文件命令**：涉及用户指定导入/导出路径，必须被视为显式授权操作。
+   - 例如：`export_preferences`、`import_preferences`
+
+路径边界规则：
+
+- `AppPreferences.outputDir` 是下载与本地盘点的唯一 active root
+- 本地盘点只允许扫描当前 active `outputDir`，不得隐式扩展到其他目录
+- 下载任务默认只允许写入当前 active `outputDir` 及其派生专辑子目录
+- 应用内部状态文件只允许写入 `{app_data_dir}`
+- 导入/导出命令虽然接收用户提供路径，但在实现上应视为高风险能力，不得被普通业务命令复用为通用文件读写通道
+- 若前端不需要消费绝对路径，则命令返回值、事件和错误信息不应暴露绝对本地路径
+
+前端可见性规则：
+
+- 事件与命令返回优先暴露业务语义，不暴露超出 UI 所需的本地文件系统细节
+- 进度事件中的路径字段应优先使用相对路径、标识符或可省略字段，而不是绝对路径
+- 错误字符串应避免把本地绝对路径直接回传到前端
+
+实现约束：
+
+- 新增 Tauri command 时，必须先归类到上述三类之一，再决定是否允许接收路径参数
+- 默认不把“任意路径读写”设计成通用能力暴露给前端
+- 若命令需要用户指定路径，契约和前端交互都应明确这是一次显式授权，而不是普通后台行为
 
 ### 内容命令
 
@@ -355,6 +379,8 @@
 - `set_preferences()` 中 `outputDir` 变更后，异步触发新的本地盘点
 - `set_preferences()` 不阻塞等待盘点完成
 - 同一时刻仅允许一个 active root；新扫描请求可以覆盖旧扫描请求
+- 盘点命令不得把当前 active root 之外的目录作为隐式扫描目标
+- 盘点事件与快照若无 UI 必要，不应暴露绝对本地路径
 
 ### 下载任务命令
 
@@ -372,21 +398,7 @@
 建模约束：
 
 - `create_download_job` 通过 `kind` / `albumCid` 表达整专下载
-
-### 通知偏好命令
-
-命令如下：
-
-1. `get_notification_preferences() -> NotificationPreferences`
-2. `set_notification_preferences(preferences: NotificationPreferences) -> NotificationPreferences`
-3. `get_notification_permission_state() -> NotificationPermissionState`
-4. `send_test_notification() -> void`
-
-行为说明：
-
-- 通知偏好存储在应用状态中，不持久化到磁盘
-- 通知权限状态由 Tauri 通知插件返回，反映系统级权限授予情况
-- 测试通知用于验证通知管道是否正常工作
+- 下载写入根目录应受当前 active `outputDir` 约束，不应退化为前端可随意指定的通用文件写入能力
 
 ### 偏好命令
 
@@ -394,6 +406,12 @@
 2. `set_preferences(preferences: AppPreferences) -> AppPreferences`
 3. `get_notification_permission_state() -> NotificationPermissionState`
 4. `send_test_notification() -> void`
+
+行为说明：
+
+- 通知开关字段属于 `AppPreferences`，不再单独暴露 `NotificationPreferences`
+- 通知权限状态由 Tauri 通知插件返回，反映系统级权限授予情况
+- 测试通知用于验证通知管道是否正常工作
 
 验证规则：
 
@@ -425,6 +443,8 @@
 
 - `export_preferences` 和 `import_preferences` 都由用户指定路径，并返回操作后的偏好快照
 - `import_preferences` 导入 TOML 后执行与 `set_preferences` 相同的验证规则；验证失败时返回错误且不更新状态
+- 两者属于高风险文件命令：语义上视为“用户显式授权的一次性读/写”，不是普通业务命令可复用的通用文件系统接口
+- 若前端不需要绝对路径回显，则返回值和错误信息不应额外暴露本地绝对路径
 
 ## Events
 
@@ -543,3 +563,5 @@
 17. `inventoryVersion` 是下载标记动态缓存的统一失效键。
 18. `outputDir` 改变后，后端异步自动重扫当前 active root。
 19. MD5 只做 best-effort，不作为能力成功与否的前置条件。
+20. Tauri command 默认遵循最小权限原则：只读、受限文件、高风险文件三类必须显式区分。
+21. 非 UI 必需时，不向前端暴露绝对本地路径。

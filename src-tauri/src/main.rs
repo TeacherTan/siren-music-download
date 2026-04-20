@@ -13,9 +13,8 @@
 //!   [`commands::play_next`]、[`commands::play_previous`]、
 //!   [`commands::stop_playback`]、[`commands::get_player_state`]、
 //!   [`commands::set_playback_volume`]
-//! - 下载和工具：[`commands::download_song`]、
-//!   [`commands::get_default_output_dir`]、[`commands::clear_audio_cache`]、
-//!   [`commands::extract_image_theme`]
+//! - 下载和工具：[`commands::get_default_output_dir`]、
+//!   [`commands::clear_audio_cache`]、[`commands::extract_image_theme`]
 //!
 //! # 事件
 //!
@@ -36,6 +35,7 @@ mod app_state;
 mod audio_cache;
 mod commands;
 mod downloads;
+mod local_inventory;
 mod notification;
 mod player;
 mod preferences;
@@ -113,6 +113,12 @@ fn main() {
                 eprintln!("[media-session] disabled: {error:#}");
             }
             downloads::bridge::initialize(app.handle(), &state);
+            local_inventory::spawn_inventory_scan(
+                app.handle().clone(),
+                state.clone(),
+                state.preferences().output_dir,
+                None,
+            );
             app.manage(state);
 
             #[cfg(debug_assertions)]
@@ -142,9 +148,11 @@ fn main() {
             commands::preferences::set_preferences,
             commands::preferences::export_preferences,
             commands::preferences::import_preferences,
+            commands::local_inventory::get_local_inventory_snapshot,
+            commands::local_inventory::rescan_local_inventory,
+            commands::local_inventory::cancel_local_inventory_scan,
             commands::preferences::get_notification_permission_state,
             commands::preferences::send_test_notification,
-            commands::downloads::download_song,
             commands::downloads::clear_audio_cache,
             commands::downloads::create_download_job,
             commands::downloads::list_download_jobs,

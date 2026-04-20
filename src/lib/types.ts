@@ -1,14 +1,64 @@
+export interface AlbumDownloadBadge {
+  hasDownloadedTracks: boolean;
+  downloadedTrackCount: number;
+  verifiedTrackCount: number;
+  mismatchTrackCount: number;
+  inventoryVersion: string;
+}
+
+export type LocalTrackDownloadStatus =
+  | 'missing'
+  | 'detected'
+  | 'verified'
+  | 'mismatch'
+  | 'partial'
+  | 'unverifiable'
+  | 'unknown';
+
+export interface TrackDownloadBadge {
+  isDownloaded: boolean;
+  downloadStatus: LocalTrackDownloadStatus;
+  inventoryVersion: string;
+}
+
+export type LocalInventoryStatus = 'idle' | 'scanning' | 'completed' | 'failed';
+
+export type VerificationMode = 'none' | 'whenAvailable' | 'strict';
+
+export interface LocalInventorySnapshot {
+  rootOutputDir: string;
+  status: LocalInventoryStatus;
+  inventoryVersion: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  scannedFileCount: number;
+  matchedTrackCount: number;
+  verifiedTrackCount: number;
+  lastError: string | null;
+}
+
+export interface LocalInventoryScanProgressEvent {
+  rootOutputDir: string;
+  inventoryVersion: string;
+  filesScanned: number;
+  matchedTrackCount: number;
+  verifiedTrackCount: number;
+  currentPath: string | null;
+}
+
 export interface Album {
   cid: string;
   name: string;
   coverUrl: string;
   artists: string[];
+  download: AlbumDownloadBadge;
 }
 
 export interface SongEntry {
   cid: string;
   name: string;
   artists: string[];
+  download: TrackDownloadBadge;
 }
 
 export interface PlaybackQueueEntry {
@@ -32,6 +82,7 @@ export interface SongDetail {
   mvUrl: string | null;
   mvCoverUrl: string | null;
   artists: string[];
+  download: TrackDownloadBadge;
 }
 
 export interface AlbumDetail {
@@ -43,6 +94,7 @@ export interface AlbumDetail {
   coverDeUrl: string | null;
   artists: string[] | null;
   songs: SongEntry[];
+  download: AlbumDownloadBadge;
 }
 
 export interface ThemePalette {
@@ -173,11 +225,6 @@ export interface PlayerState {
   progress: number;
   duration: number;
   volume: number;
-}
-
-export interface NotificationPreferences {
-  notifyOnDownloadComplete: boolean;
-  notifyOnPlaybackChange: boolean;
 }
 
 export interface AppPreferences {

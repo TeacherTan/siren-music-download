@@ -4,7 +4,8 @@ import { getCached, setCached } from './cache';
 import type {
   Album, AlbumDetail, SongDetail, ThemePalette, PlayerState, PlaybackContext,
   CreateDownloadJobRequest, DownloadJobSnapshot, DownloadManagerSnapshot,
-  NotificationPermissionState, NotificationPreferences, AppPreferences,
+  NotificationPermissionState, AppPreferences, LocalInventorySnapshot,
+  VerificationMode,
 } from './types';
 import type { OutputFormat } from './types';
 
@@ -160,23 +161,6 @@ export async function clearAudioCache(): Promise<number> {
 }
 
 /**
- * Download a single song into the selected output directory.
- */
-export async function downloadSong(
-  songCid: string,
-  outputDir: string,
-  format: OutputFormat,
-  downloadLyrics: boolean,
-): Promise<string> {
-  return invoke('download_song', {
-    songCid,
-    outputDir,
-    format,
-    downloadLyrics,
-  });
-}
-
-/**
  * Extract a theme palette from artwork and cache it for reuse.
  */
 export async function extractImageTheme(imageUrl: string): Promise<ThemePalette> {
@@ -270,22 +254,6 @@ export async function clearDownloadHistory(): Promise<number> {
 }
 
 /**
- * Get notification preferences from the Tauri backend.
- */
-export async function getNotificationPreferences(): Promise<NotificationPreferences> {
-  return invoke('get_notification_preferences');
-}
-
-/**
- * Update notification preferences in the Tauri backend.
- */
-export async function setNotificationPreferences(
-  preferences: NotificationPreferences,
-): Promise<NotificationPreferences> {
-  return invoke('set_notification_preferences', { preferences });
-}
-
-/**
  * Get notification permission state from the Tauri backend.
  */
 export async function getNotificationPermissionState(): Promise<NotificationPermissionState> {
@@ -297,6 +265,31 @@ export async function getNotificationPermissionState(): Promise<NotificationPerm
  */
 export async function sendTestNotification(): Promise<void> {
   return invoke('send_test_notification');
+}
+
+/**
+ * Get the latest local inventory snapshot.
+ */
+export async function getLocalInventorySnapshot(): Promise<LocalInventorySnapshot> {
+  return invoke<LocalInventorySnapshot>('get_local_inventory_snapshot');
+}
+
+/**
+ * Trigger a local inventory rescan.
+ */
+export async function rescanLocalInventory(
+  verificationMode?: VerificationMode,
+): Promise<LocalInventorySnapshot> {
+  return invoke<LocalInventorySnapshot>('rescan_local_inventory', {
+    verificationMode: verificationMode ?? null,
+  });
+}
+
+/**
+ * Cancel the current local inventory scan.
+ */
+export async function cancelLocalInventoryScan(): Promise<LocalInventorySnapshot> {
+  return invoke<LocalInventorySnapshot>('cancel_local_inventory_scan');
 }
 
 // ---------------------------------------------------------------------------

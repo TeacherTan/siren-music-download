@@ -1,10 +1,10 @@
-use crate::preferences::{AppPreferences, PreferencesStore};
 use crate::audio_cache;
+use crate::local_inventory::LocalInventoryService;
 use crate::player::stream::{GrowingFileHandle, PlaybackInput, SampleBuffer};
 use crate::player::{AudioPlayer, PlaybackContext, PlaybackQueueEntry};
+use crate::preferences::{AppPreferences, PreferencesStore};
 use anyhow::{Context, Result};
 use siren_core::DownloadService;
-use siren_core::OutputFormat;
 use souvlaki::{MediaControlEvent, SeekDirection};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -16,6 +16,7 @@ pub(crate) struct AppState {
     pub(crate) player: Arc<AudioPlayer>,
     pub(crate) api: Arc<siren_core::ApiClient>,
     pub(crate) download_service: Arc<Mutex<DownloadService>>,
+    pub(crate) local_inventory_service: LocalInventoryService,
     pub(crate) preferences_store: Arc<PreferencesStore>,
     pub(crate) preferences: Arc<StdMutex<AppPreferences>>,
 }
@@ -25,6 +26,7 @@ impl AppState {
         let player = AudioPlayer::new(app.clone()).map_err(|e| e.to_string())?;
         let api = siren_core::ApiClient::new().map_err(|e| e.to_string())?;
         let download_service = Arc::new(Mutex::new(DownloadService::new()));
+        let local_inventory_service = LocalInventoryService::new();
         let app_data_dir = app
             .path()
             .app_data_dir()
@@ -35,6 +37,7 @@ impl AppState {
             player: Arc::new(player),
             api: Arc::new(api),
             download_service,
+            local_inventory_service,
             preferences_store: Arc::new(store),
             preferences: Arc::new(StdMutex::new(preferences)),
         })
@@ -380,11 +383,3 @@ fn normalize_seek_position(position_secs: f64, duration_secs: f64) -> f64 {
     }
 }
 
-pub(crate) fn parse_output_format(format: &str) -> Result<OutputFormat, String> {
-    match format {
-        "wav" => Ok(OutputFormat::Wav),
-        "flac" => Ok(OutputFormat::Flac),
-        "mp3" => Ok(OutputFormat::Mp3),
-        _ => Err(format!("Unsupported output format: {format}")),
-    }
-}

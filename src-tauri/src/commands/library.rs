@@ -5,7 +5,17 @@ use tauri::State;
 
 #[tauri::command]
 pub async fn get_albums(state: State<'_, AppState>) -> Result<Vec<siren_core::api::Album>, String> {
-    state.api.get_albums().await.map_err(|e| e.to_string())
+    let albums = state.api.get_albums().await.map_err(|e| e.to_string())?;
+    let mut album_details = Vec::with_capacity(albums.len());
+    for album in &albums {
+        if let Ok(detail) = state.api.get_album_detail(&album.cid).await {
+            album_details.push(detail);
+        }
+    }
+    Ok(state
+        .local_inventory_service
+        .enrich_album_list_with_details(albums, &album_details)
+        .await)
 }
 
 #[tauri::command]
@@ -13,11 +23,15 @@ pub async fn get_album_detail(
     state: State<'_, AppState>,
     album_cid: String,
 ) -> Result<siren_core::api::AlbumDetail, String> {
-    state
+    let album = state
         .api
         .get_album_detail(&album_cid)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    Ok(state
+        .local_inventory_service
+        .enrich_album_detail(album)
+        .await)
 }
 
 #[tauri::command]
@@ -25,11 +39,20 @@ pub async fn get_song_detail(
     state: State<'_, AppState>,
     cid: String,
 ) -> Result<siren_core::api::SongDetail, String> {
-    state
+    let song = state
         .api
         .get_song_detail(&cid)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    let album = state
+        .api
+        .get_album_detail(&song.album_cid)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(state
+        .local_inventory_service
+        .enrich_song_detail(song, &album.name)
+        .await)
 }
 
 #[tauri::command]
@@ -98,7 +121,7 @@ pub async fn get_image_data_url(
 #[tauri::command]
 pub fn get_default_output_dir() -> String {
     dirs::download_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")))
         .join("SirenMusic")
         .to_string_lossy()
         .to_string()

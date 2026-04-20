@@ -79,7 +79,16 @@
     <img class="album-cover-img" alt={album.name} />
   </div>
   <div class="album-info">
-    <div class="album-name">{album.name}</div>
+    <div class="album-name-row">
+      <div class="album-name">{album.name}</div>
+      {#if album.download.hasDownloadedTracks}
+        <span class="album-download-badge">
+          {album.download.downloadedTrackCount > 0
+            ? `${album.download.downloadedTrackCount} 首已下载`
+            : "已下载"}
+        </span>
+      {/if}
+    </div>
     <div class="album-artists">{(album.artists || []).join(', ')}</div>
   </div>
 </motion.div>
@@ -146,14 +155,32 @@
     min-width: 0;
   }
 
+  .album-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin-bottom: 2px;
+  }
+
   .album-name {
     font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
-    margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .album-download-badge {
+    flex-shrink: 0;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border-radius: 999px;
+    padding: 4px 8px;
   }
 
   .album-artists {

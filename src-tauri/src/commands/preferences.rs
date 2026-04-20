@@ -1,4 +1,5 @@
 use crate::app_state::AppState;
+use crate::local_inventory::spawn_inventory_scan;
 use crate::preferences::AppPreferences;
 use std::path::Path;
 use tauri::State;
@@ -13,13 +14,23 @@ pub async fn get_preferences(state: State<'_, AppState>) -> Result<AppPreference
 /// 设置偏好（验证后落盘）
 #[tauri::command]
 pub async fn set_preferences(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     preferences: AppPreferences,
 ) -> Result<AppPreferences, String> {
     preferences.validate()?;
+    let previous = state.preferences();
     let store = state.preferences_store();
     store.save(&preferences)?;
     state.set_preferences(preferences.clone());
+    if previous.output_dir != preferences.output_dir {
+        spawn_inventory_scan(
+            app,
+            state.inner().clone(),
+            preferences.output_dir.clone(),
+            None,
+        );
+    }
     Ok(preferences)
 }
 
@@ -38,13 +49,23 @@ pub async fn export_preferences(
 /// 从指定路径导入偏好
 #[tauri::command]
 pub async fn import_preferences(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input_path: String,
 ) -> Result<AppPreferences, String> {
+    let previous = state.preferences();
     let store = state.preferences_store();
     let imported = store.import_from(Path::new(&input_path))?;
     store.save(&imported)?;
     state.set_preferences(imported.clone());
+    if previous.output_dir != imported.output_dir {
+        spawn_inventory_scan(
+            app,
+            state.inner().clone(),
+            imported.output_dir.clone(),
+            None,
+        );
+    }
     Ok(imported)
 }
 

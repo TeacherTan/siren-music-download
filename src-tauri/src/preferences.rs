@@ -24,14 +24,55 @@ impl AppPreferences {
             _ => return Err(format!("不支持的格式: {}", self.output_format)),
         }
         let path = Path::new(&self.output_dir);
+        if path.as_os_str().is_empty() || !path.is_absolute() {
+            return Err("保存路径必须是绝对目录路径".to_string());
+        }
         if !path.exists() {
             return Err("保存路径不存在".to_string());
         }
+        ensure_not_symlink(path, "保存路径不能是符号链接")?;
         if !path.is_dir() {
             return Err("保存路径不是目录".to_string());
         }
         Ok(())
     }
+}
+
+fn validate_explicit_export_path(path: &Path) -> Result<(), String> {
+    if path.as_os_str().is_empty() || !path.is_absolute() {
+        return Err("导出路径必须是绝对文件路径".to_string());
+    }
+    if path.exists() {
+        ensure_not_symlink(path, "导出路径不能是符号链接")?;
+    }
+    if path.exists() && path.is_dir() {
+        return Err("导出路径必须是文件路径".to_string());
+    }
+    Ok(())
+}
+
+fn validate_explicit_import_path(path: &Path) -> Result<(), String> {
+    if path.as_os_str().is_empty() || !path.is_absolute() {
+        return Err("导入路径必须是绝对文件路径".to_string());
+    }
+    if !path.exists() {
+        return Err("导入文件不存在".to_string());
+    }
+    ensure_not_symlink(path, "导入路径不能是符号链接")?;
+    if !path.is_file() {
+        return Err("导入路径必须是文件".to_string());
+    }
+    Ok(())
+}
+
+fn ensure_not_symlink(path: &Path, message: &str) -> Result<(), String> {
+    if fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return Err(message.to_string());
+    }
+    Ok(())
 }
 
 impl Default for AppPreferences {
@@ -64,7 +105,12 @@ impl PreferencesStore {
         if self.path.exists() {
             match fs::read_to_string(&self.path) {
                 Ok(content) => match toml::from_str::<AppPreferences>(&content) {
-                    Ok(prefs) => return prefs,
+                    Ok(prefs) => match prefs.validate() {
+                        Ok(()) => return prefs,
+                        Err(error) => {
+                            eprintln!("[preferences] invalid persisted preferences: {error}");
+                        }
+                    },
                     Err(e) => {
                         eprintln!("[preferences] failed to parse TOML: {e}");
                     }
@@ -76,14 +122,22 @@ impl PreferencesStore {
         }
         // 缺失或损坏时写入默认值（output_dir 使用下载目录兜底）
         let default_output_dir = dirs::download_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("SirenMusic")
-            .to_string_lossy()
-            .to_string();
+            .unwrap_or_else(|| {
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/"))
+            })
+            .join("SirenMusic");
+        let resolved_output_dir = if fs::create_dir_all(&default_output_dir).is_ok() {
+            default_output_dir
+        } else {
+            self.path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| std::path::PathBuf::from("/"))
+        };
         let default_prefs = AppPreferences {
             schema_version: 1,
             output_format: "flac".to_string(),
-            output_dir: default_output_dir,
+            output_dir: resolved_output_dir.to_string_lossy().to_string(),
             download_lyrics: true,
             notify_on_download_complete: true,
             notify_on_playback_change: true,
@@ -96,37 +150,34 @@ impl PreferencesStore {
 
     /// 原子写入偏好到 TOML 文件
     pub(crate) fn save(&self, prefs: &AppPreferences) -> Result<(), String> {
-        let parent = self.path.parent().ok_or("no parent directory")?;
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("failed to create directory {:?}: {e}", parent))?;
+        let parent = self.path.parent().ok_or("偏好目录无效")?;
+        fs::create_dir_all(parent).map_err(|_| "创建偏好目录失败".to_string())?;
         let content = toml::to_string_pretty(prefs)
             .map_err(|e| format!("failed to serialize preferences: {e}"))?;
-        fs::write(&self.path, content.as_bytes())
-            .map_err(|e| format!("failed to write preferences file: {e}"))?;
+        fs::write(&self.path, content.as_bytes()).map_err(|_| "写入偏好文件失败".to_string())?;
         Ok(())
     }
 
     /// 导出偏好到指定路径
     pub(crate) fn export_to(&self, prefs: &AppPreferences, path: &Path) -> Result<(), String> {
+        validate_explicit_export_path(path)?;
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("failed to create export directory: {e}"))?;
+                fs::create_dir_all(parent).map_err(|_| "创建导出目录失败".to_string())?;
             }
         }
         let content = toml::to_string_pretty(prefs)
             .map_err(|e| format!("failed to serialize preferences: {e}"))?;
-        fs::write(path, content.as_bytes())
-            .map_err(|e| format!("failed to write export file: {e}"))?;
+        fs::write(path, content.as_bytes()).map_err(|_| "写入导出文件失败".to_string())?;
         Ok(())
     }
 
     /// 从指定路径导入偏好（读取后验证）
     pub(crate) fn import_from(&self, path: &Path) -> Result<AppPreferences, String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("failed to read import file: {e}"))?;
-        let prefs: AppPreferences = toml::from_str(&content)
-            .map_err(|e| format!("failed to parse TOML: {e}"))?;
+        validate_explicit_import_path(path)?;
+        let content = fs::read_to_string(path).map_err(|_| "读取导入文件失败".to_string())?;
+        let prefs: AppPreferences =
+            toml::from_str(&content).map_err(|e| format!("failed to parse TOML: {e}"))?;
         prefs.validate()?;
         Ok(prefs)
     }

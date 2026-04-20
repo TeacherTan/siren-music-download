@@ -2,12 +2,11 @@ import type { DownloadJobSnapshot } from "$lib/types";
 
 export function hasCurrentDownloadOptions(
   job: DownloadJobSnapshot,
-  outputDir: string,
+  _outputDir: string,
   format: string,
   downloadLyrics: boolean,
 ): boolean {
   return (
-    job.options.outputDir === outputDir &&
     job.options.format === format &&
     job.options.downloadLyrics === downloadLyrics
   );

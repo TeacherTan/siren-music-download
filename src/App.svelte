@@ -33,8 +33,9 @@
     sendTestNotification,
     getPreferences,
     setPreferences,
+    getLocalInventorySnapshot,
   } from "$lib/api";
-  import { clearCache } from "$lib/cache";
+  import { clearCache, clearCachedByPrefix } from "$lib/cache";
   import type {
     Album,
     AlbumDetail,
@@ -49,6 +50,7 @@
     CreateDownloadJobRequest,
     DownloadTaskSnapshot,
     AppPreferences,
+    LocalInventorySnapshot,
   } from "$lib/types";
   import { applyThemePalette, DEFAULT_THEME_PALETTE } from "$lib/theme";
   import { motionStyles } from "$lib/actions/motionStyles";
@@ -672,7 +674,6 @@
 
   function hasCurrentDownloadOptions(job: DownloadJobSnapshot): boolean {
     return (
-      job.options.outputDir === outputDir &&
       job.options.format === format &&
       job.options.downloadLyrics === downloadLyrics
     );
@@ -725,11 +726,9 @@
     return (
       downloadManager.jobs.find((job) => {
         if (job.kind !== "album") return false;
-        const matchesAlbum = job.tasks.some(
-          (task) => task.albumCid === albumCid,
-        );
-        if (!matchesAlbum) return false;
-        return job.status === "queued" || job.status === "running";
+        if (job.status !== "queued" && job.status !== "running") return false;
+        if (!hasCurrentDownloadOptions(job)) return false;
+        return job.tasks.some((task) => task.albumCid === albumCid);
       }) ?? null
     );
   }
@@ -782,6 +781,7 @@
       downloadManager.jobs.find(
         (job) =>
           (job.status === "queued" || job.status === "running") &&
+          hasCurrentDownloadOptions(job) &&
           job.tasks.some((task) => task.songCid === songCid),
       ) ?? null
     );
@@ -803,7 +803,7 @@
         songCids: [songCid],
         albumCid: null,
         options: {
-          outputDir,
+          outputDir: "",
           format,
           downloadLyrics,
         },
@@ -852,7 +852,7 @@
         songCids: [],
         albumCid: album.cid,
         options: {
-          outputDir,
+          outputDir: "",
           format,
           downloadLyrics,
         },
@@ -888,7 +888,7 @@
         songCids,
         albumCid: null,
         options: {
-          outputDir,
+          outputDir: "",
           format,
           downloadLyrics,
         },
@@ -1395,6 +1395,7 @@
     let unlistenDownloadManager: (() => void) | null = null;
     let unlistenDownloadJob: (() => void) | null = null;
     let unlistenDownloadProgress: (() => void) | null = null;
+    let unlistenLocalInventory: (() => void) | null = null;
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     function updateReducedMotionPreference() {
@@ -1511,11 +1512,45 @@
         },
       );
 
+      unlistenLocalInventory = await listen<LocalInventorySnapshot>(
+        "local-inventory-state-changed",
+        async (event) => {
+          const previousVersion = localInventory?.inventoryVersion ?? null;
+          localInventory = event.payload;
+          if (
+            event.payload.status === "completed" &&
+            previousVersion !== event.payload.inventoryVersion
+          ) {
+            invalidateInventoryCaches();
+            try {
+              const nextAlbums = await getAlbums();
+              albums = nextAlbums;
+              if (selectedAlbumCid) {
+                const refreshedAlbum = nextAlbums.find(
+                  (album) => album.cid === selectedAlbumCid,
+                );
+                if (refreshedAlbum) {
+                  selectedAlbum = await getAlbumDetail(refreshedAlbum.cid);
+                }
+              }
+            } catch {
+              // Keep current UI state if refresh fails.
+            }
+          }
+        },
+      );
+
       // Initialize download manager state
       try {
         downloadManager = await listDownloadJobs();
       } catch {
         // Download manager not available
+      }
+
+      try {
+        localInventory = await getLocalInventorySnapshot();
+      } catch {
+        localInventory = null;
       }
 
       try {
@@ -1543,6 +1578,7 @@
       unlistenDownloadManager?.();
       unlistenDownloadJob?.();
       unlistenDownloadProgress?.();
+      unlistenLocalInventory?.();
       mediaQuery.removeEventListener("change", updateReducedMotionPreference);
       window.removeEventListener("resize", handleWindowResize);
     };
@@ -1707,6 +1743,12 @@
   let isOutputDirHovered = $state(false);
   let isOutputDirFocused = $state(false);
   let prefsReady = $state(false);
+  let localInventory = $state<LocalInventorySnapshot | null>(null);
+
+  function invalidateInventoryCaches() {
+    clearCachedByPrefix("album_detail:");
+    clearCachedByPrefix("song_detail:");
+  }
 
   async function handleSelectDirectory() {
     const dir = await selectDirectory(outputDir);

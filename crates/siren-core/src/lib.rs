@@ -16,6 +16,7 @@ pub mod api;
 pub mod audio;
 pub mod download;
 pub mod downloader;
+pub mod local_inventory;
 
 // 重新导出公共 API，便于上层直接使用
 pub use api::{Album, AlbumDetail, ApiClient, SongDetail, SongEntry};
@@ -30,4 +31,10 @@ pub use downloader::{
     album_cover_exists, album_output_dir, download_album_cover, download_song,
     download_song_phase1, write_album_cover_bytes, write_payload_to_disk, DownloadProgress,
     MetaOverride, OwnedFlacMetadata, WritePayload,
+};
+pub use local_inventory::{
+    aggregate_album_badge, badge_for_detected_file, badge_for_status, candidate_relative_paths,
+    empty_album_badge, has_detected_track, missing_track_badge, AlbumDownloadBadge,
+    LocalInventoryScanProgressEvent, LocalInventorySnapshot, LocalInventoryStatus,
+    LocalTrackDownloadStatus, TrackDownloadBadge, VerificationMode,
 };

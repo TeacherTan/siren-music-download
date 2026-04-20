@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 - 技术栈：Rust + Tauri 2 + Vite + Svelte 5
 - 形态：跨平台桌面应用（macOS / Windows / Linux）
-- 当前重点：M1–M5-a/b 已完成，当前主界面已切换到新的 UI shell，并具备系统通知与远程封面解析链路
+- 当前重点：M1–M5-a/b 已完成，当前主界面已切换到新的 UI shell，并具备系统通知、统一偏好系统与远程封面解析链路
 
 ## 常用命令
 
@@ -112,8 +112,13 @@ Cargo workspace
 - `retry_download_job`
 - `retry_download_task`
 - `clear_download_history`
-- `get_notification_preferences`
-- `set_notification_preferences`
+- `get_preferences`
+- `set_preferences`
+- `export_preferences`
+- `import_preferences`
+- `get_local_inventory_snapshot`
+- `rescan_local_inventory`
+- `cancel_local_inventory_scan`
 - `get_notification_permission_state`
 - `send_test_notification`
 
@@ -157,12 +162,14 @@ Cargo workspace
 - **M1** 下载任务领域模型、DownloadService、单曲任务化、新 commands / events
 - **M2** 整专下载、专辑封面落盘、下载进度事件推送、前端总进度展示、专辑页批量下载入口、重复创建保护
 - **M3** 任务取消、重试、历史清理、结构化错误码与详情、独立下载面板 UI
-- **M4** 系统通知集成（下载完成通知、播放切换通知、通知偏好开关）
+- **M4** 系统通知集成（下载完成通知、播放切换通知、通知权限检查与测试通知）
 - **M5-a** 批量选择管理 UI（全选、清空、反选按钮）
 - **M5-b** 流水线下载优化（download/write 两阶段流水线，整专下载吞吐提升）
+- **Phase 5** 统一偏好系统（`AppPreferences` + `preferences.toml` 持久化 + 导入导出）
 
 ### 未完成
 
+- **Phase 6** 本地已下载盘点与下载标记（当前进行中）
 - M5 其他切片：搜索/过滤、下载历史视图增强、session 持久化
 
 ## 代码层约定
