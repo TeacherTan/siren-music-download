@@ -24,6 +24,12 @@ pub fn clear_audio_cache(state: State<'_, AppState>) -> Result<u64, String> {
     audio_cache::clear_audio_cache().map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn clear_response_cache(state: State<'_, AppState>) -> Result<(), String> {
+    state.api.clear_response_cache();
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Phase 1: Download job management commands
 // ---------------------------------------------------------------------------

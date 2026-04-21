@@ -4,8 +4,8 @@
 
 相关文档：
 
-- [BACKEND_COMPLETED_PHASES.md](BACKEND_COMPLETED_PHASES.md)：后端已完成阶段（Phase 1~8）
-- [BACKEND_PENDING_PHASES.md](BACKEND_PENDING_PHASES.md)：后端待办阶段（Phase 9~11）
+- [BACKEND_COMPLETED_PHASES.md](BACKEND_COMPLETED_PHASES.md)：后端已完成阶段（Phase 1~9）
+- [BACKEND_PENDING_PHASES.md](BACKEND_PENDING_PHASES.md)：后端待办阶段（Phase 10~11）
 - [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md)：前端架构与开发指南
 
 ## 共享类型
@@ -462,6 +462,7 @@
 5. `extract_image_theme(imageUrl: string) -> ThemePalette`
 6. `get_image_data_url(imageUrl: string) -> string`
 7. `get_default_output_dir() -> string`
+8. `clear_response_cache() -> void`
 
 返回约束：
 

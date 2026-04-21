@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 - 技术栈：Rust + Tauri 2 + Vite + Svelte 5
 - 形态：跨平台桌面应用（macOS / Windows / Linux）
-- 当前重点：Phase 1–7 已完成，Phase 8 已交付首版本地盘点与下载标记能力，当前主要在补齐校验链与后续历史/缓存能力
+- 当前重点：Phase 1–9 已完成，当前主要聚焦 Phase 10 下载 session 持久化与 Phase 11 搜索 / 过滤 / 历史视图增强
 
 ## 常用命令
 
@@ -104,6 +104,7 @@ Cargo workspace
 - `get_player_state`
 - `set_playback_volume`
 - `clear_audio_cache`
+- `clear_response_cache`
 - `create_download_job`
 - `list_download_jobs`
 - `get_download_job`
@@ -142,8 +143,8 @@ Cargo workspace
 
 - `README.md`：项目介绍、使用方式、构建命令
 - `doc/BACKEND_API_CONTRACT.md`：后端类型、命令、事件的唯一契约来源
-- `doc/BACKEND_COMPLETED_PHASES.md`：后端已完成阶段（Phase 1~7 与 Phase 8 基线）
-- `doc/BACKEND_PENDING_PHASES.md`：后端待办阶段（Phase 8 剩余增强项与 Phase 9~11）
+- `doc/BACKEND_COMPLETED_PHASES.md`：后端已完成阶段（Phase 1~9）
+- `doc/BACKEND_PENDING_PHASES.md`：后端待办阶段（Phase 10~11）
 - `doc/FRONTEND_GUIDE.md`：前端架构、开发约定与验收基线
 - `doc/DECISIONS.md`：技术选型决策记录（ADR）
 - `doc/REVIEW_RULES.md`：测试整理、结构性重构、文档补充的评审与审批规则
@@ -151,8 +152,8 @@ Cargo workspace
 
 ## 当前实现状态
 
-- **已完成**：Phase 1–7，Phase 8 基线
-- **进行中 / 未完成**：Phase 8 剩余增强项，Phase 9，Phase 10，Phase 11
+- **已完成**：Phase 1–9
+- **进行中 / 未完成**：Phase 10，Phase 11
 - **已完成阶段明细**：见 `doc/BACKEND_COMPLETED_PHASES.md`
 - **待办阶段明细**：见 `doc/BACKEND_PENDING_PHASES.md`
 

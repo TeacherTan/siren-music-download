@@ -8,12 +8,10 @@ use tauri::{AppHandle, Manager};
 const MAX_CACHE_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 const MAX_CACHED_FILES: usize = 128;
 
-/// Returns the temporary directory for cached cover artwork.
 pub fn temp_dir() -> PathBuf {
     std::env::temp_dir().join("siren-music-download-covers")
 }
 
-/// Infers the file extension from a cover URL.
 fn file_extension(cover_url: &str) -> &'static str {
     let path = cover_url.split('?').next().unwrap_or(cover_url);
     if path.ends_with(".png") {
@@ -71,14 +69,14 @@ fn cleanup_cache(dir: &std::path::Path) {
     }
 }
 
-/// Downloads cover artwork to a local temporary file and returns the path.
-///
-/// Uses MD5 hash of the URL as the filename to enable caching.
-/// Returns `None` if download fails.
 pub async fn download_to_temp(app: &AppHandle, cover_url: &str) -> Option<PathBuf> {
     let temp_dir = temp_dir();
     std::fs::create_dir_all(&temp_dir).ok()?;
-    cleanup_cache(&temp_dir);
+
+    let cleanup_dir = temp_dir.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = tokio::task::spawn_blocking(move || cleanup_cache(&cleanup_dir)).await;
+    });
 
     let url_hash = format!("{:x}", md5::compute(cover_url.as_bytes()));
     let temp_path = temp_dir.join(format!("{}.{}", url_hash, file_extension(cover_url)));

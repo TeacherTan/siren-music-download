@@ -10,8 +10,9 @@
 
 - **Phase 1–7 已完成**
 - **Phase 8 已完成**
+- **Phase 9 已完成**
 - Phase 8 当前已包含：结构化本地证据、`verified` / `mismatch` / `partial` / `unverifiable` 的实际产出、下载链路 provenance 记录、下载后自动重扫、`inventoryVersion` 驱动的前端缓存失效与状态展示
-- 当前待办已切换为 **Phase 9–11**
+- 当前待办已切换为 **Phase 10–11**
 
 ## 已完成阶段
 
@@ -76,6 +77,17 @@
 - 下载写盘成功后的 provenance 记录与自动 inventory 刷新
 - `inventoryVersion` 驱动的专辑详情 / 歌曲详情缓存失效
 - 前端专辑列表、专辑详情、曲目行的下载状态展示
+
+### Phase 9：缓存替换方案
+
+- 前端缓存重写为分类型分层缓存（albums / songs / lyrics / themes / covers）
+- albums / songs / lyrics 支持 IndexedDB 持久化与启动预热
+- 支持按 key / tag 失效，并纳入 `inventoryVersion` 驱动的失效链
+- 提供前端缓存 hit / miss / eviction 统计
+- `siren-core` `ApiClient` 增加 100 条 LRU 响应缓存
+- 增加 `clear_response_cache` 命令，支持手动刷新时同步清理后端响应缓存
+- 音频缓存增加 2GB 软上限与后台按 mtime 淘汰
+- 通知封面缓存清理改为异步后台执行，不阻塞主流程
 
 ## 已落地基础能力补充
 

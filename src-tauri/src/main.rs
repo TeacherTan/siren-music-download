@@ -174,6 +174,7 @@ fn main() {
             commands::logging::list_log_records,
             commands::logging::get_log_file_status,
             commands::downloads::clear_audio_cache,
+            commands::downloads::clear_response_cache,
             commands::downloads::create_download_job,
             commands::downloads::list_download_jobs,
             commands::downloads::get_download_job,

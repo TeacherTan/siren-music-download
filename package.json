@@ -24,6 +24,7 @@
     "@humanspeak/svelte-motion": "^0.2.0",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "^2.7.0",
+    "idb-keyval": "^6.2.2",
     "overlayscrollbars": "^2.15.1",
     "overlayscrollbars-svelte": "^0.5.5"
   },

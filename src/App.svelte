@@ -20,6 +20,7 @@
     seekCurrentPlayback,
     getPlayerState,
     clearAudioCache,
+    clearResponseCache,
     extractImageTheme,
     getImageDataUrl,
     getSongLyrics,
@@ -37,7 +38,12 @@
     listLogRecords,
     getLogFileStatus,
   } from "$lib/api";
-  import { clearCache, clearCachedByPrefix } from "$lib/cache";
+  import {
+    clearCache,
+    createInventoryCacheTag,
+    invalidateByTag,
+    warmCacheManager,
+  } from "$lib/cache";
   import type {
     Album,
     AlbumDetail,
@@ -1432,6 +1438,12 @@
 
       // Load unified preferences from backend (non-blocking on failure)
       try {
+        await warmCacheManager();
+      } catch {
+        // Keep startup usable if IndexedDB warm start is unavailable.
+      }
+
+      try {
         const prefs = await getPreferences();
         outputDir = prefs.outputDir || outputDir;
         format = prefs.outputFormat || format;
@@ -1550,15 +1562,18 @@
         "local-inventory-state-changed",
         async (event) => {
           const previousVersion = localInventory?.inventoryVersion ?? null;
+          const previousStatus = localInventory?.status ?? null;
           localInventory = event.payload;
           const inventoryVersionChanged =
             previousVersion !== event.payload.inventoryVersion;
+          const scanJustCompleted =
+            event.payload.status === "completed" && previousStatus !== "completed";
 
           if (inventoryVersionChanged) {
-            invalidateInventoryCaches();
+            await invalidateInventoryCaches(previousVersion);
           }
 
-          if (event.payload.status === "completed" && inventoryVersionChanged) {
+          if (scanJustCompleted) {
             try {
               await refreshAlbumsList();
             } catch {
@@ -1826,9 +1841,10 @@
     }
   }
 
-  function invalidateInventoryCaches() {
-    clearCachedByPrefix("album_detail:");
-    clearCachedByPrefix("song_detail:");
+  async function invalidateInventoryCaches(
+    inventoryVersion: string | null | undefined,
+  ) {
+    await invalidateByTag(createInventoryCacheTag(inventoryVersion));
   }
 
   async function refreshAlbumsList() {
@@ -2342,11 +2358,10 @@
     clearSongSelection();
     selectionModeEnabled = false;
 
-    // Clear cache
-    clearCache();
-
-    // Reload current album if selected
     try {
+      await clearCache();
+      await clearResponseCache();
+
       const nextAlbums = await getAlbums();
       albums = nextAlbums;
       if (selectedAlbumCid) {
@@ -2393,11 +2408,10 @@
       }
     } catch (e) {
       console.error("[ERROR] Failed to refresh album list:", e);
+    } finally {
+      await delay(400);
+      isRefreshing = false;
     }
-
-    // Brief delay to show spinning state
-    await delay(400);
-    isRefreshing = false;
   }
 </script>
 

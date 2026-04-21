@@ -1,95 +1,69 @@
 use crate::local_inventory::{AlbumDownloadBadge, TrackDownloadBadge};
 use anyhow::Result;
+use lru::LruCache;
 use reqwest::Client;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
+use std::sync::{Arc, Mutex};
 
-const BASE_URL: &str = "https://monster-siren.hypergryph.com/api";
+const DEFAULT_BASE_URL: &str = "https://monster-siren.hypergryph.com/api";
+const DEFAULT_CACHE_CAPACITY: usize = 100;
 
-/// `GET /api/albums` 返回的专辑摘要。
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Album {
-    /// 供详情接口使用的稳定专辑标识。
     pub cid: String,
-    /// 专辑显示名称。
     pub name: String,
-    /// 封面图地址。
     #[serde(rename = "coverUrl")]
     pub cover_url: String,
-    /// 上游接口返回的专辑艺术家列表。
     #[serde(alias = "artistes")]
     pub artists: Vec<String>,
-    /// 当前 active outputDir 下的专辑级本地下载标记。
     #[serde(default)]
     pub download: AlbumDownloadBadge,
 }
 
-/// `GET /api/album/{cid}/detail` 返回的专辑详情。
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AlbumDetail {
-    /// 稳定专辑标识。
     pub cid: String,
-    /// 专辑显示名称。
     pub name: String,
-    /// 可选的专辑简介文本。
     pub intro: Option<String>,
-    /// 上游接口中的归属字段，例如系列名或分类名。
     pub belong: String,
-    /// 默认封面图地址。
     #[serde(rename = "coverUrl")]
     pub cover_url: String,
-    /// 备用封面图地址，通常是更大图或去标版本。
     #[serde(rename = "coverDeUrl")]
     pub cover_de_url: Option<String>,
-    /// 上游响应中携带的专辑艺术家列表。
     #[serde(alias = "artistes")]
     pub artists: Option<Vec<String>>,
-    /// 当前 active outputDir 下的专辑详情级本地下载聚合标记。
     #[serde(default)]
     pub download: AlbumDownloadBadge,
-    /// 该专辑包含的歌曲列表。
     pub songs: Vec<SongEntry>,
 }
 
-/// [`AlbumDetail`] 中内嵌的歌曲摘要。
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SongEntry {
-    /// 稳定歌曲标识。
     pub cid: String,
-    /// 歌曲显示名称。
     pub name: String,
-    /// 歌曲艺术家列表。
     #[serde(alias = "artistes")]
     pub artists: Vec<String>,
-    /// 当前 active outputDir 下的本地下载标记。
     #[serde(default)]
     pub download: TrackDownloadBadge,
 }
 
-/// `GET /api/song/{cid}` 返回的歌曲详情。
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SongDetail {
-    /// 稳定歌曲标识。
     pub cid: String,
-    /// 歌曲显示名称。
     pub name: String,
-    /// 所属专辑的标识。
     #[serde(rename = "albumCid")]
     pub album_cid: String,
-    /// 用于播放和下载的音频地址。
     #[serde(rename = "sourceUrl")]
     pub source_url: String,
-    /// 可选歌词文件地址。
     #[serde(rename = "lyricUrl")]
     pub lyric_url: Option<String>,
-    /// 可选 MV 地址。
     #[serde(rename = "mvUrl")]
     pub mv_url: Option<String>,
-    /// 可选 MV 封面地址。
     #[serde(rename = "mvCoverUrl")]
     pub mv_cover_url: Option<String>,
-    /// 歌曲艺术家列表。
     pub artists: Vec<String>,
-    /// 当前 active outputDir 下的本地下载标记。
     #[serde(default)]
     pub download: TrackDownloadBadge,
 }
@@ -102,71 +76,121 @@ struct ApiResponse<T> {
     data: T,
 }
 
-/// 面向 Monster Siren 公开接口的强类型 HTTP 客户端。
 #[derive(Clone)]
 pub struct ApiClient {
     client: Client,
+    base_url: String,
+    response_cache: Arc<Mutex<LruCache<String, Vec<u8>>>>,
 }
 
 impl ApiClient {
-    /// 创建一个带有上游服务期望 `User-Agent` 的客户端。
     pub fn new() -> Result<Self> {
+        Self::new_with_config(DEFAULT_BASE_URL.to_string(), DEFAULT_CACHE_CAPACITY)
+    }
+
+    fn new_with_config(base_url: String, capacity: usize) -> Result<Self> {
         let client = Client::builder()
             .user_agent("Mozilla/5.0 (compatible; siren-music-download)")
             .build()?;
-        Ok(Self { client })
+        let capacity = NonZeroUsize::new(capacity).expect("cache capacity must be non-zero");
+        Ok(Self {
+            client,
+            base_url: base_url.trim_end_matches('/').to_string(),
+            response_cache: Arc::new(Mutex::new(LruCache::new(capacity))),
+        })
     }
 
-    /// 获取 `GET /api/albums` 返回的完整专辑列表。
+    fn api_url(&self, path: &str) -> String {
+        format!("{}/{}", self.base_url, path.trim_start_matches('/'))
+    }
+
+    fn cache_key(method: &str, resource: &str) -> String {
+        format!("{:x}", md5::compute(format!("{method}:{resource}")))
+    }
+
+    fn read_cached_bytes(&self, cache_key: &str) -> Option<Vec<u8>> {
+        self.response_cache
+            .lock()
+            .ok()
+            .and_then(|mut cache| cache.get(cache_key).cloned())
+    }
+
+    fn write_cached_bytes(&self, cache_key: String, bytes: &[u8]) {
+        if let Ok(mut cache) = self.response_cache.lock() {
+            cache.put(cache_key, bytes.to_vec());
+        }
+    }
+
+    async fn fetch_response_bytes(&self, url: &str, accept_json: bool) -> Result<Vec<u8>> {
+        let mut request = self.client.get(url);
+        if accept_json {
+            request = request.header("Accept", "application/json");
+        }
+
+        let response = request.send().await?.error_for_status()?;
+        Ok(response.bytes().await?.to_vec())
+    }
+
+    async fn fetch_streamed_bytes(
+        &self,
+        url: &str,
+        mut on_progress: impl FnMut(u64, Option<u64>),
+    ) -> Result<Vec<u8>> {
+        use futures::StreamExt;
+
+        let response = self.client.get(url).send().await?.error_for_status()?;
+        let total = response.content_length();
+        let mut stream = response.bytes_stream();
+        let mut bytes = Vec::new();
+        let mut downloaded = 0_u64;
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            downloaded += chunk.len() as u64;
+            bytes.extend_from_slice(&chunk);
+            on_progress(downloaded, total);
+        }
+
+        Ok(bytes)
+    }
+
+    fn decode_api_response<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
+        let response: ApiResponse<T> = serde_json::from_slice(bytes)?;
+        anyhow::ensure!(response.code == 0, "API error code {}", response.code);
+        Ok(response.data)
+    }
+
+    async fn get_cached_api_data<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        let cache_key = Self::cache_key("GET", path);
+        if let Some(bytes) = self.read_cached_bytes(&cache_key) {
+            return Self::decode_api_response(&bytes);
+        }
+
+        let bytes = self.fetch_response_bytes(&self.api_url(path), true).await?;
+        let data = Self::decode_api_response(&bytes)?;
+        self.write_cached_bytes(cache_key, &bytes);
+        Ok(data)
+    }
+
+    pub fn clear_response_cache(&self) {
+        if let Ok(mut cache) = self.response_cache.lock() {
+            cache.clear();
+        }
+    }
+
     pub async fn get_albums(&self) -> Result<Vec<Album>> {
-        let resp: ApiResponse<Vec<Album>> = self
-            .client
-            .get(format!("{BASE_URL}/albums"))
-            .header("Accept", "application/json")
-            .send()
-            .await?
-            .json()
-            .await?;
-
-        anyhow::ensure!(resp.code == 0, "API error code {}", resp.code);
-        Ok(resp.data)
+        self.get_cached_api_data("albums").await
     }
 
-    /// 获取单个专辑及其内嵌歌曲列表，对应
-    /// `GET /api/album/{album_cid}/detail`。
     pub async fn get_album_detail(&self, album_cid: &str) -> Result<AlbumDetail> {
-        let resp: ApiResponse<AlbumDetail> = self
-            .client
-            .get(format!("{BASE_URL}/album/{album_cid}/detail"))
-            .header("Accept", "application/json")
-            .send()
-            .await?
-            .json()
-            .await?;
-
-        anyhow::ensure!(resp.code == 0, "API error code {}", resp.code);
-        Ok(resp.data)
+        self.get_cached_api_data(&format!("album/{album_cid}/detail"))
+            .await
     }
 
-    /// 获取单首歌曲详情，对应 `GET /api/song/{cid}`。
     pub async fn get_song_detail(&self, cid: &str) -> Result<SongDetail> {
-        let resp: ApiResponse<SongDetail> = self
-            .client
-            .get(format!("{BASE_URL}/song/{cid}"))
-            .header("Accept", "application/json")
-            .send()
-            .await?
-            .json()
-            .await?;
-
-        anyhow::ensure!(resp.code == 0, "API error code {}", resp.code);
-        Ok(resp.data)
+        self.get_cached_api_data(&format!("song/{cid}")).await
     }
 
-    /// 从 `url` 按块流式下载原始字节。
-    ///
-    /// 回调会收到每个数据块、当前累计下载字节数，以及可选的总长度。
-    /// 如果返回 `Ok(false)`，会提前停止读取。
     pub async fn download_stream(
         &self,
         url: &str,
@@ -174,7 +198,7 @@ impl ApiClient {
     ) -> Result<()> {
         use futures::StreamExt;
 
-        let resp = self.client.get(url).send().await?;
+        let resp = self.client.get(url).send().await?.error_for_status()?;
         let total = resp.content_length();
         let mut stream = resp.bytes_stream();
         let mut downloaded = 0_u64;
@@ -190,25 +214,22 @@ impl ApiClient {
         Ok(())
     }
 
-    /// 把 `url` 的全部内容下载到内存中。
-    ///
-    /// 回调会在每个数据块结束后收到当前累计下载字节数和可选总长度。
     pub async fn download_bytes(
         &self,
         url: &str,
         mut on_progress: impl FnMut(u64, Option<u64>),
     ) -> Result<Vec<u8>> {
-        let mut buf = Vec::new();
-        self.download_stream(url, |chunk, downloaded, total| {
-            buf.extend_from_slice(chunk);
-            on_progress(downloaded, total);
-            Ok(true)
-        })
-        .await?;
-        Ok(buf)
+        let cache_key = Self::cache_key("GET", url);
+        if let Some(bytes) = self.read_cached_bytes(&cache_key) {
+            on_progress(bytes.len() as u64, Some(bytes.len() as u64));
+            return Ok(bytes);
+        }
+
+        let bytes = self.fetch_streamed_bytes(url, on_progress).await?;
+        self.write_cached_bytes(cache_key, &bytes);
+        Ok(bytes)
     }
 
-    /// 从 `url` 下载文本内容。
     pub async fn download_text(&self, url: &str) -> Result<String> {
         let bytes = self.download_bytes(url, |_, _| {}).await?;
         Ok(String::from_utf8_lossy(&bytes)
@@ -220,6 +241,86 @@ impl ApiClient {
 #[cfg(test)]
 mod tests {
     use super::ApiClient;
+    use httpmock::prelude::*;
+
+    impl ApiClient {
+        fn new_for_test(base_url: String, capacity: usize) -> anyhow::Result<Self> {
+            Self::new_with_config(base_url, capacity)
+        }
+    }
+
+    fn album_detail_body(cid: &str, name: &str) -> String {
+        format!(
+            r#"{{"code":0,"msg":"ok","data":{{"cid":"{cid}","name":"{name}","intro":null,"belong":"EP","coverUrl":"https://example.com/{cid}.jpg","coverDeUrl":null,"artistes":["Test Artist"],"songs":[]}}}}"#
+        )
+    }
+
+    #[tokio::test]
+    async fn returns_cached_album_detail_without_second_network_call() {
+        let server = MockServer::start();
+        let album_mock = server.mock(|when, then| {
+            when.method(GET).path("/api/album/alpha/detail");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(album_detail_body("alpha", "Alpha"));
+        });
+
+        let client =
+            ApiClient::new_for_test(format!("{}/api", server.base_url()), 100).expect("client");
+
+        let first = client.get_album_detail("alpha").await.expect("first call");
+        let second = client.get_album_detail("alpha").await.expect("second call");
+
+        assert_eq!(first.cid, "alpha");
+        assert_eq!(second.name, "Alpha");
+        album_mock.assert_hits(1);
+    }
+
+    #[tokio::test]
+    async fn does_not_cache_failed_upstream_response() {
+        let server = MockServer::start();
+        let failure_mock = server.mock(|when, then| {
+            when.method(GET).path("/api/album/beta/detail");
+            then.status(500);
+        });
+
+        let client =
+            ApiClient::new_for_test(format!("{}/api", server.base_url()), 100).expect("client");
+
+        assert!(client.get_album_detail("beta").await.is_err());
+        assert!(client.get_album_detail("beta").await.is_err());
+        failure_mock.assert_hits(2);
+    }
+
+    #[tokio::test]
+    async fn evicts_least_recently_used_response_when_capacity_is_exceeded() {
+        let server = MockServer::start();
+        let alpha_mock = server.mock(|when, then| {
+            when.method(GET).path("/api/album/alpha/detail");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(album_detail_body("alpha", "Alpha"));
+        });
+        let beta_mock = server.mock(|when, then| {
+            when.method(GET).path("/api/album/beta/detail");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(album_detail_body("beta", "Beta"));
+        });
+
+        let client =
+            ApiClient::new_for_test(format!("{}/api", server.base_url()), 1).expect("client");
+
+        client.get_album_detail("alpha").await.expect("alpha first");
+        client.get_album_detail("beta").await.expect("beta first");
+        client
+            .get_album_detail("alpha")
+            .await
+            .expect("alpha second");
+
+        alpha_mock.assert_hits(2);
+        beta_mock.assert_hits(1);
+    }
 
     #[tokio::test]
     #[ignore = "hits the live Monster Siren API"]

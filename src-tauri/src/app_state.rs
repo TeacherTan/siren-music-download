@@ -491,6 +491,7 @@ impl AppState {
                 Ok(()) if !stop_flag.load(Ordering::SeqCst) => {
                     handle.mark_complete();
                     let _ = std::fs::remove_file(&pending_marker);
+                    audio_cache::spawn_cleanup_if_needed();
                 }
                 Ok(()) => {
                     handle.mark_error("Playback stopped");
