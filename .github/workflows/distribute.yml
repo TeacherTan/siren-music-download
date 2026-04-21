@@ -54,7 +54,7 @@ jobs:
 
             while [ "${#parts[@]}" -lt 3 ]; do
               parts+=("0")
-            done
+            fi
 
             printf 'v%s.%s.%s%s\n' "${parts[0]}" "${parts[1]}" "${parts[2]}" "$prerelease"
           }
