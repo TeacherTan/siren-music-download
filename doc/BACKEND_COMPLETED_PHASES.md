@@ -11,8 +11,9 @@
 - **Phase 1–7 已完成**
 - **Phase 8 已完成**
 - **Phase 9 已完成**
+- **Phase 10 已完成**
 - Phase 8 当前已包含：结构化本地证据、`verified` / `mismatch` / `partial` / `unverifiable` 的实际产出、下载链路 provenance 记录、下载后自动重扫、`inventoryVersion` 驱动的前端缓存失效与状态展示
-- 当前待办已切换为 **Phase 10–11**
+- 当前待办已切换为 **Phase 11**
 
 ## 已完成阶段
 
@@ -88,6 +89,16 @@
 - 增加 `clear_response_cache` 命令，支持手动刷新时同步清理后端响应缓存
 - 音频缓存增加 2GB 软上限与后台按 mtime 淘汰
 - 通知封面缓存清理改为异步后台执行，不阻塞主流程
+
+### Phase 10：下载 session 持久化
+
+- 下载 job / task 快照与 manager 元数据落盘到版本化 JSON 文件
+- 应用启动时自动加载下载历史，并恢复到内存态 `DownloadService`
+- 上一 session 中处于 `queued / preparing / downloading / writing / running` 的任务统一修正为可见终态，不自动续传
+- 下载任务创建、状态跃迁、重试、取消、历史清理后都会触发持久化写盘
+- 历史持久化写入使用原子替换，避免中途写坏状态文件
+- 增加终态历史保留策略，限制状态文件增长
+- 状态文件损坏或 schema 不兼容时会记录日志并回退为空历史，不阻塞启动
 
 ## 已落地基础能力补充
 

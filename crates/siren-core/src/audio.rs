@@ -43,7 +43,7 @@ impl AudioFormat {
 }
 
 /// Output format chosen by user
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OutputFormat {
     /// Keep as WAV (lossless, direct from API — no conversion needed)

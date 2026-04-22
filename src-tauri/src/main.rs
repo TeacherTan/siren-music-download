@@ -34,6 +34,7 @@
 mod app_state;
 mod audio_cache;
 mod commands;
+mod download_session;
 mod downloads;
 mod local_inventory;
 mod local_inventory_provenance;

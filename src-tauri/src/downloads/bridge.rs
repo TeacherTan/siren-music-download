@@ -30,7 +30,7 @@ use siren_core::{album_cover_exists, album_output_dir, download_album_cover};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Called once during `main.rs` setup.  Starts the download execution loop
 /// that polls for queued jobs and drives tasks to completion.
@@ -106,6 +106,7 @@ async fn execution_loop(app: &AppHandle, state: AppState) {
                 break;
             };
 
+            state.persist_download_snapshot(&service.lock().await.manager_snapshot());
             emit_download_job_updated(app, &preparing_snapshot);
             let manager_snapshot = service.lock().await.manager_snapshot();
             emit_download_manager_state_changed(app, &manager_snapshot);
@@ -152,7 +153,7 @@ async fn execution_loop(app: &AppHandle, state: AppState) {
                     let (final_status, output_path_str, error, _) =
                         unpack_task_result(failed_result);
 
-                    let snapshot = {
+                    let update = {
                         let mut svc = service.lock().await;
                         svc.update_task_state(
                             &job_id_clone,
@@ -165,9 +166,10 @@ async fn execution_loop(app: &AppHandle, state: AppState) {
                         )
                     };
 
-                    if let Some(s) = snapshot {
-                        emit_download_job_updated(app, &s);
+                    if let Some(update) = update {
                         let manager_snapshot = service.lock().await.manager_snapshot();
+                        state.persist_download_snapshot(&manager_snapshot);
+                        emit_download_job_updated(app, &update.snapshot);
                         emit_download_manager_state_changed(app, &manager_snapshot);
                     }
                 }
@@ -190,8 +192,11 @@ async fn start_job(
         svc.start_next_queued_job()
     }?;
 
-    emit_download_job_updated(app, &job_snapshot);
     let manager_snapshot = service.lock().await.manager_snapshot();
+    if let Some(state) = app.try_state::<AppState>() {
+        state.persist_download_snapshot(&manager_snapshot);
+    }
+    emit_download_job_updated(app, &job_snapshot);
     emit_download_manager_state_changed(app, &manager_snapshot);
 
     let (write_tx, mut write_rx) = tokio::sync::mpsc::channel::<WriteJob>(1);
@@ -209,7 +214,7 @@ async fn start_job(
                         let service = Arc::clone(&service);
                         let app = app.clone();
                         tauri::async_runtime::spawn(async move {
-                            let snapshot = {
+                            let update = {
                                 let mut svc = service.lock().await;
                                 svc.update_task_state(
                                     &progress.job_id,
@@ -221,9 +226,15 @@ async fn start_job(
                                     None,
                                 )
                             };
-                            if let Some(s) = snapshot {
+                            if let Some(update) = update {
                                 let _ = app.emit(DOWNLOAD_TASK_PROGRESS, &progress);
-                                emit_download_job_updated(&app, &s);
+                                if update.should_persist {
+                                    let manager_snapshot = service.lock().await.manager_snapshot();
+                                    if let Some(state) = app.try_state::<AppState>() {
+                                        state.persist_download_snapshot(&manager_snapshot);
+                                    }
+                                }
+                                emit_download_job_updated(&app, &update.snapshot);
                             }
                         });
                     }
@@ -308,7 +319,7 @@ async fn run_download_phase(
             let service = Arc::clone(&service);
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                let snapshot = {
+                let update = {
                     let mut svc = service.lock().await;
                     svc.update_task_state(
                         &progress.job_id,
@@ -320,9 +331,15 @@ async fn run_download_phase(
                         None,
                     )
                 };
-                if let Some(s) = snapshot {
+                if let Some(update) = update {
                     let _ = app.emit(DOWNLOAD_TASK_PROGRESS, &progress);
-                    emit_download_job_updated(&app, &s);
+                    if update.should_persist {
+                        let manager_snapshot = service.lock().await.manager_snapshot();
+                        if let Some(app_state) = app.try_state::<AppState>() {
+                            app_state.persist_download_snapshot(&manager_snapshot);
+                        }
+                    }
+                    emit_download_job_updated(&app, &update.snapshot);
                 }
             });
         }
@@ -355,8 +372,11 @@ async fn finalize_job(
     };
 
     if let Some(s) = snapshot {
-        emit_download_job_updated(app, &s);
         let manager_snapshot = service.lock().await.manager_snapshot();
+        if let Some(state) = app.try_state::<AppState>() {
+            state.persist_download_snapshot(&manager_snapshot);
+        }
+        emit_download_job_updated(app, &s);
         emit_download_manager_state_changed(app, &manager_snapshot);
 
         crate::notification::notify_download_completed(app, &s);
@@ -376,7 +396,7 @@ async fn collect_write_result(
     let (final_status, output_path_str, error, completed_artifacts) =
         unpack_task_result(write_result.outcome);
 
-    let snapshot = {
+    let update = {
         let mut svc = state.download_service.lock().await;
         svc.update_task_state(
             &write_result.task.job_id,
@@ -402,9 +422,10 @@ async fn collect_write_result(
         spawn_inventory_scan(app.clone(), state.clone(), root_output_dir, None);
     }
 
-    if let Some(s) = snapshot {
-        emit_download_job_updated(app, &s);
+    if let Some(update) = update {
         let manager_snapshot = state.download_service.lock().await.manager_snapshot();
+        state.persist_download_snapshot(&manager_snapshot);
+        emit_download_job_updated(app, &update.snapshot);
         emit_download_manager_state_changed(app, &manager_snapshot);
     }
 }

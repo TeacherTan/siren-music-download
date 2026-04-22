@@ -2,7 +2,7 @@ use crate::audio::OutputFormat;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadOptions {
     pub output_dir: String,
@@ -10,7 +10,7 @@ pub struct DownloadOptions {
     pub download_lyrics: bool,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum DownloadJobKind {
     Song,
@@ -41,7 +41,7 @@ pub enum DownloadTaskStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DownloadErrorCode {
     Network,
@@ -55,7 +55,7 @@ pub enum DownloadErrorCode {
     Internal,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadErrorInfo {
     pub code: DownloadErrorCode,
@@ -64,7 +64,7 @@ pub struct DownloadErrorInfo {
     pub details: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadTaskSnapshot {
     pub id: String,
@@ -407,7 +407,7 @@ mod tests {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadJobSnapshot {
     pub id: String,
@@ -426,7 +426,7 @@ pub struct DownloadJobSnapshot {
     pub error: Option<DownloadErrorInfo>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadManagerSnapshot {
     pub jobs: Vec<DownloadJobSnapshot>,

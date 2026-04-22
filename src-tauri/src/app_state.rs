@@ -1,4 +1,5 @@
 use crate::audio_cache;
+use crate::download_session::DownloadSessionStore;
 use crate::local_inventory::LocalInventoryService;
 use crate::local_inventory_provenance::LocalInventoryProvenanceStore;
 use crate::logging::{LogCenter, LogLevel, LogPayload};
@@ -6,7 +7,7 @@ use crate::player::stream::{GrowingFileHandle, PlaybackInput, SampleBuffer};
 use crate::player::{AudioPlayer, PlaybackContext, PlaybackQueueEntry};
 use crate::preferences::{AppPreferences, PreferencesStore};
 use anyhow::{Context, Result};
-use siren_core::DownloadService;
+use siren_core::{DownloadManagerSnapshot, DownloadService};
 use souvlaki::{MediaControlEvent, SeekDirection};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -21,6 +22,7 @@ pub(crate) struct AppState {
     pub(crate) download_service: Arc<Mutex<DownloadService>>,
     pub(crate) local_inventory_service: LocalInventoryService,
     pub(crate) local_inventory_provenance_store: Arc<LocalInventoryProvenanceStore>,
+    pub(crate) download_session_store: Arc<DownloadSessionStore>,
     pub(crate) preferences_store: Arc<PreferencesStore>,
     pub(crate) preferences: Arc<StdMutex<AppPreferences>>,
     pub(crate) log_center: Arc<LogCenter>,
@@ -35,11 +37,15 @@ impl AppState {
         let log_center = Arc::new(LogCenter::new(app.clone())?);
         let player = AudioPlayer::new(app.clone()).map_err(|e| e.to_string())?;
         let api = siren_core::ApiClient::new().map_err(|e| e.to_string())?;
-        let download_service = Arc::new(Mutex::new(DownloadService::new()));
         let app_data_dir = app
             .path()
             .app_data_dir()
             .map_err(|e| format!("failed to get app data dir: {e}"))?;
+        let download_session_store = Arc::new(DownloadSessionStore::new(app_data_dir.clone()));
+        let loaded_download_session = download_session_store.load(Some(log_center.as_ref()));
+        let download_service = Arc::new(Mutex::new(DownloadService::from_manager_snapshot(
+            loaded_download_session.snapshot.clone(),
+        )));
         let local_inventory_provenance_store = Arc::new(
             LocalInventoryProvenanceStore::new(app_data_dir.clone()).map_err(|e| e.to_string())?,
         );
@@ -47,16 +53,21 @@ impl AppState {
             LocalInventoryService::new(local_inventory_provenance_store.clone());
         let store = PreferencesStore::new(app_data_dir);
         let preferences = store.load(Some(log_center.as_ref()));
-        Ok(Self {
+        let state = Self {
             player: Arc::new(player),
             api: Arc::new(api),
             download_service,
             local_inventory_service,
             local_inventory_provenance_store,
+            download_session_store,
             preferences_store: Arc::new(store),
             preferences: Arc::new(StdMutex::new(preferences)),
             log_center,
-        })
+        };
+        if loaded_download_session.should_persist {
+            state.persist_download_snapshot(&loaded_download_session.snapshot);
+        }
+        Ok(state)
     }
 
     pub(crate) fn preferences(&self) -> AppPreferences {
@@ -69,6 +80,21 @@ impl AppState {
 
     pub(crate) fn preferences_store(&self) -> Arc<PreferencesStore> {
         self.preferences_store.clone()
+    }
+
+    pub(crate) fn persist_download_snapshot(&self, snapshot: &DownloadManagerSnapshot) {
+        if let Err(error) = self.download_session_store.save(snapshot) {
+            self.log_center.record(
+                LogPayload::new(
+                    LogLevel::Error,
+                    "download-session",
+                    "download_session.write_failed",
+                    "Failed to persist download session",
+                )
+                .user_message("下载历史保存失败")
+                .details(error),
+            );
+        }
     }
 
     pub(crate) async fn play_song_internal(

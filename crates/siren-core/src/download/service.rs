@@ -2,10 +2,11 @@ use crate::api::ApiClient;
 use crate::download::error::DownloadServiceError;
 use crate::download::model::{
     CreateDownloadJobRequest, DownloadErrorCode, DownloadErrorInfo, DownloadJob, DownloadJobKind,
-    DownloadJobSnapshot, DownloadJobStatus, DownloadManagerSnapshot, DownloadTaskStatus,
-    InternalDownloadTask,
+    DownloadJobSnapshot, DownloadJobStatus, DownloadManagerSnapshot, DownloadTaskSnapshot,
+    DownloadTaskStatus, InternalDownloadTask,
 };
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use time::format_description::well_known::Iso8601;
@@ -91,6 +92,11 @@ impl DownloadServiceState {
     }
 }
 
+pub struct TaskStateUpdate {
+    pub snapshot: DownloadJobSnapshot,
+    pub should_persist: bool,
+}
+
 #[derive(Default)]
 pub struct DownloadService {
     state: DownloadServiceState,
@@ -100,6 +106,18 @@ pub struct DownloadService {
 impl DownloadService {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn from_manager_snapshot(snapshot: DownloadManagerSnapshot) -> Self {
+        Self {
+            state: DownloadServiceState {
+                jobs: snapshot.jobs.into_iter().map(restore_job).collect(),
+                active_job_id: None,
+                active_task_id: None,
+                active_task_cancel_flag: None,
+            },
+            id_generator: IdGenerator::default(),
+        }
     }
 
     pub fn snapshot(&self) -> DownloadManagerSnapshot {
@@ -430,7 +448,7 @@ impl DownloadService {
         bytes_total: Option<u64>,
         output_path: Option<&str>,
         error: Option<DownloadErrorInfo>,
-    ) -> Option<DownloadJobSnapshot> {
+    ) -> Option<TaskStateUpdate> {
         let job = self.state.jobs.iter_mut().find(|job| job.id == job_id)?;
         let task = job.tasks.iter_mut().find(|task| task.id == task_id)?;
 
@@ -444,6 +462,10 @@ impl DownloadService {
             return None;
         }
 
+        let previous_status = task.status;
+        let previous_output_path = task.output_path.clone();
+        let had_error = task.error.is_some();
+
         if let Some(done) = bytes_done {
             task.bytes_done = done;
         }
@@ -456,10 +478,17 @@ impl DownloadService {
         if error.is_some() {
             task.error = error;
         }
-        // Status is always updated last
         task.status = status;
 
-        Some(job.to_snapshot())
+        let should_persist = task.status != previous_status
+            || task.output_path != previous_output_path
+            || (!had_error && task.error.is_some())
+            || is_terminal_task_status(task.status);
+
+        Some(TaskStateUpdate {
+            snapshot: job.to_snapshot(),
+            should_persist,
+        })
     }
 
     /// Finalize a job after all tasks have been processed.
@@ -575,6 +604,66 @@ fn make_task(
     }
 }
 
+fn restore_job(snapshot: DownloadJobSnapshot) -> DownloadJob {
+    let mut job = DownloadJob {
+        id: snapshot.id,
+        kind: snapshot.kind,
+        status: snapshot.status,
+        created_at: snapshot.created_at,
+        started_at: snapshot.started_at,
+        finished_at: snapshot.finished_at,
+        options: snapshot.options,
+        title: snapshot.title,
+        tasks: Vec::new(),
+        error: snapshot.error,
+    };
+
+    job.tasks = snapshot
+        .tasks
+        .into_iter()
+        .map(|task| restore_task(task, &job))
+        .collect();
+    job.status = job.job_status();
+
+    job
+}
+
+fn restore_task(snapshot: DownloadTaskSnapshot, job: &DownloadJob) -> InternalDownloadTask {
+    InternalDownloadTask {
+        id: snapshot.id,
+        job_id: snapshot.job_id,
+        song_cid: snapshot.song_cid,
+        song_name: snapshot.song_name,
+        artists: snapshot.artists,
+        album_cid: snapshot.album_cid,
+        album_name: snapshot.album_name,
+        status: snapshot.status,
+        bytes_done: snapshot.bytes_done,
+        bytes_total: snapshot.bytes_total,
+        output_path: snapshot
+            .output_path
+            .map(|path| restore_output_path(&path, &job.options.output_dir)),
+        error: snapshot.error,
+        attempt: snapshot.attempt,
+        song_index: snapshot.song_index,
+        song_count: snapshot.song_count,
+        format: job.options.format,
+        download_lyrics: job.options.download_lyrics,
+    }
+}
+
+fn restore_output_path(path: &str, root_output_dir: &str) -> String {
+    let restored = Path::new(path);
+    if restored.is_absolute() {
+        return path.to_string();
+    }
+
+    Path::new(root_output_dir)
+        .join(restored)
+        .to_string_lossy()
+        .to_string()
+}
+
 fn cancel_task_if_active(task: &mut InternalDownloadTask) {
     if matches!(
         task.status,
@@ -645,9 +734,11 @@ mod tests {
     };
     use crate::audio::OutputFormat;
     use crate::download::model::{
-        DownloadJob, DownloadJobKind, DownloadJobStatus, DownloadOptions, DownloadTaskStatus,
+        DownloadErrorCode, DownloadErrorInfo, DownloadJob, DownloadJobKind, DownloadJobStatus,
+        DownloadManagerSnapshot, DownloadOptions, DownloadTaskSnapshot, DownloadTaskStatus,
         InternalDownloadTask,
     };
+    use std::path::Path;
     use time::format_description::well_known::Iso8601;
     use time::OffsetDateTime;
 
@@ -690,6 +781,245 @@ mod tests {
             tasks,
             error: None,
         }
+    }
+
+    fn make_task_snapshot(status: DownloadTaskStatus) -> DownloadTaskSnapshot {
+        DownloadTaskSnapshot {
+            id: "task-1".to_string(),
+            job_id: "job-1".to_string(),
+            song_cid: "song-1".to_string(),
+            song_name: "Song".to_string(),
+            artists: vec!["Artist".to_string()],
+            album_cid: "album-1".to_string(),
+            album_name: "Album".to_string(),
+            status,
+            bytes_done: 128,
+            bytes_total: Some(512),
+            output_path: Some("Album/Song.flac".to_string()),
+            error: Some(DownloadErrorInfo {
+                code: DownloadErrorCode::Internal,
+                message: "persisted".to_string(),
+                retryable: true,
+                details: None,
+            }),
+            attempt: 2,
+            song_index: 0,
+            song_count: 1,
+        }
+    }
+
+    #[test]
+    fn restores_service_from_manager_snapshot() {
+        let snapshot = DownloadManagerSnapshot {
+            jobs: vec![crate::download::model::DownloadJobSnapshot {
+                id: "job-1".to_string(),
+                kind: DownloadJobKind::Album,
+                status: DownloadJobStatus::Running,
+                created_at: "2026-04-15T00:00:00Z".to_string(),
+                started_at: Some("2026-04-15T00:00:10Z".to_string()),
+                finished_at: None,
+                options: DownloadOptions {
+                    output_dir: "/tmp".to_string(),
+                    format: OutputFormat::Mp3,
+                    download_lyrics: false,
+                },
+                title: "Album".to_string(),
+                task_count: 1,
+                completed_task_count: 0,
+                failed_task_count: 0,
+                cancelled_task_count: 0,
+                tasks: vec![make_task_snapshot(DownloadTaskStatus::Downloading)],
+                error: None,
+            }],
+            active_job_id: Some("job-1".to_string()),
+            queued_job_ids: vec!["job-1".to_string()],
+        };
+
+        let service = DownloadService::from_manager_snapshot(snapshot);
+        let restored = service.manager_snapshot();
+
+        assert_eq!(restored.active_job_id, None);
+        assert!(restored.queued_job_ids.is_empty());
+        assert_eq!(restored.jobs.len(), 1);
+        assert!(matches!(
+            restored.jobs[0].status,
+            DownloadJobStatus::Running
+        ));
+        assert!(matches!(
+            restored.jobs[0].tasks[0].status,
+            DownloadTaskStatus::Downloading
+        ));
+        assert_eq!(restored.jobs[0].tasks[0].attempt, 2);
+    }
+
+    #[test]
+    fn restores_task_runtime_fields_from_job_options() {
+        let snapshot = DownloadManagerSnapshot {
+            jobs: vec![crate::download::model::DownloadJobSnapshot {
+                id: "job-1".to_string(),
+                kind: DownloadJobKind::Album,
+                status: DownloadJobStatus::Completed,
+                created_at: "2026-04-15T00:00:00Z".to_string(),
+                started_at: Some("2026-04-15T00:00:10Z".to_string()),
+                finished_at: Some("2026-04-15T00:01:00Z".to_string()),
+                options: DownloadOptions {
+                    output_dir: "/tmp".to_string(),
+                    format: OutputFormat::Mp3,
+                    download_lyrics: false,
+                },
+                title: "Album".to_string(),
+                task_count: 1,
+                completed_task_count: 1,
+                failed_task_count: 0,
+                cancelled_task_count: 0,
+                tasks: vec![make_task_snapshot(DownloadTaskStatus::Completed)],
+                error: None,
+            }],
+            active_job_id: None,
+            queued_job_ids: Vec::new(),
+        };
+
+        let service = DownloadService::from_manager_snapshot(snapshot);
+        let task = &service.state.jobs[0].tasks[0];
+
+        assert!(matches!(task.format, OutputFormat::Mp3));
+        assert!(!task.download_lyrics);
+        assert_eq!(
+            task.output_path.as_ref().map(|p| Path::new(p)),
+            Some(Path::new("/tmp/Album/Song.flac"))
+        );
+    }
+
+    #[test]
+    fn restores_relative_output_path_to_internal_absolute_form() {
+        let snapshot = DownloadManagerSnapshot {
+            jobs: vec![crate::download::model::DownloadJobSnapshot {
+                id: "job-1".to_string(),
+                kind: DownloadJobKind::Album,
+                status: DownloadJobStatus::Completed,
+                created_at: "2026-04-15T00:00:00Z".to_string(),
+                started_at: Some("2026-04-15T00:00:10Z".to_string()),
+                finished_at: Some("2026-04-15T00:01:00Z".to_string()),
+                options: DownloadOptions {
+                    output_dir: "/tmp/root".to_string(),
+                    format: OutputFormat::Flac,
+                    download_lyrics: true,
+                },
+                title: "Album".to_string(),
+                task_count: 1,
+                completed_task_count: 1,
+                failed_task_count: 0,
+                cancelled_task_count: 0,
+                tasks: vec![make_task_snapshot(DownloadTaskStatus::Completed)],
+                error: None,
+            }],
+            active_job_id: None,
+            queued_job_ids: Vec::new(),
+        };
+
+        let service = DownloadService::from_manager_snapshot(snapshot);
+        let restored = service.manager_snapshot();
+
+        assert_eq!(
+            restored.jobs[0].tasks[0].output_path.as_deref(),
+            Some("Album/Song.flac")
+        );
+        assert_eq!(
+            service.state.jobs[0].tasks[0]
+                .output_path
+                .as_ref()
+                .map(|p| Path::new(p)),
+            Some(Path::new("/tmp/root/Album/Song.flac"))
+        );
+    }
+
+    #[test]
+    fn recomputes_job_status_from_restored_tasks() {
+        let snapshot = DownloadManagerSnapshot {
+            jobs: vec![crate::download::model::DownloadJobSnapshot {
+                id: "job-1".to_string(),
+                kind: DownloadJobKind::Album,
+                status: DownloadJobStatus::Completed,
+                created_at: "2026-04-15T00:00:00Z".to_string(),
+                started_at: Some("2026-04-15T00:00:10Z".to_string()),
+                finished_at: Some("2026-04-15T00:01:00Z".to_string()),
+                options: DownloadOptions {
+                    output_dir: "/tmp".to_string(),
+                    format: OutputFormat::Flac,
+                    download_lyrics: true,
+                },
+                title: "Album".to_string(),
+                task_count: 2,
+                completed_task_count: 2,
+                failed_task_count: 0,
+                cancelled_task_count: 0,
+                tasks: vec![
+                    make_task_snapshot(DownloadTaskStatus::Completed),
+                    DownloadTaskSnapshot {
+                        id: "task-2".to_string(),
+                        ..make_task_snapshot(DownloadTaskStatus::Failed)
+                    },
+                ],
+                error: None,
+            }],
+            active_job_id: None,
+            queued_job_ids: Vec::new(),
+        };
+
+        let service = DownloadService::from_manager_snapshot(snapshot);
+        let restored = service.manager_snapshot();
+
+        assert!(matches!(
+            restored.jobs[0].status,
+            DownloadJobStatus::PartiallyFailed
+        ));
+    }
+
+    #[test]
+    fn can_retry_restored_failed_task() {
+        let snapshot = DownloadManagerSnapshot {
+            jobs: vec![crate::download::model::DownloadJobSnapshot {
+                id: "job-1".to_string(),
+                kind: DownloadJobKind::Album,
+                status: DownloadJobStatus::Failed,
+                created_at: "2026-04-15T00:00:00Z".to_string(),
+                started_at: Some("2026-04-15T00:00:10Z".to_string()),
+                finished_at: Some("2026-04-15T00:01:00Z".to_string()),
+                options: DownloadOptions {
+                    output_dir: "/tmp".to_string(),
+                    format: OutputFormat::Flac,
+                    download_lyrics: true,
+                },
+                title: "Album".to_string(),
+                task_count: 1,
+                completed_task_count: 0,
+                failed_task_count: 1,
+                cancelled_task_count: 0,
+                tasks: vec![make_task_snapshot(DownloadTaskStatus::Failed)],
+                error: Some(DownloadErrorInfo {
+                    code: DownloadErrorCode::Internal,
+                    message: "failed".to_string(),
+                    retryable: true,
+                    details: None,
+                }),
+            }],
+            active_job_id: None,
+            queued_job_ids: Vec::new(),
+        };
+
+        let mut service = DownloadService::from_manager_snapshot(snapshot);
+        let retried = service
+            .retry_task("job-1", "task-1")
+            .expect("job should exist");
+
+        assert!(matches!(retried.status, DownloadJobStatus::Queued));
+        assert!(matches!(
+            retried.tasks[0].status,
+            DownloadTaskStatus::Queued
+        ));
+        assert_eq!(retried.tasks[0].attempt, 3);
+        assert_eq!(retried.tasks[0].bytes_done, 0);
+        assert!(retried.tasks[0].error.is_none());
     }
 
     #[test]

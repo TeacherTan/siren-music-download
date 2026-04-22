@@ -58,6 +58,7 @@ pub async fn create_download_job(
         let manager_snapshot = service.manager_snapshot();
         (job_snapshot, manager_snapshot)
     };
+    state.persist_download_snapshot(&manager_snapshot);
 
     emit_download_job_updated(&app, &job_snapshot);
     emit_download_manager_state_changed(&app, &manager_snapshot);
@@ -96,6 +97,7 @@ pub async fn cancel_download_job(
     };
 
     if let Some(job_snapshot) = &snapshot {
+        state.persist_download_snapshot(&manager_snapshot);
         emit_download_job_updated(&app, job_snapshot);
         emit_download_manager_state_changed(&app, &manager_snapshot);
     }
@@ -118,6 +120,7 @@ pub async fn cancel_download_task(
     };
 
     if let Some(job_snapshot) = &snapshot {
+        state.persist_download_snapshot(&manager_snapshot);
         emit_download_job_updated(&app, job_snapshot);
         emit_download_manager_state_changed(&app, &manager_snapshot);
     }
@@ -139,6 +142,7 @@ pub async fn retry_download_job(
     };
 
     if let Some(job_snapshot) = &snapshot {
+        state.persist_download_snapshot(&manager_snapshot);
         emit_download_job_updated(&app, job_snapshot);
         emit_download_manager_state_changed(&app, &manager_snapshot);
     }
@@ -161,6 +165,7 @@ pub async fn retry_download_task(
     };
 
     if let Some(job_snapshot) = &snapshot {
+        state.persist_download_snapshot(&manager_snapshot);
         emit_download_job_updated(&app, job_snapshot);
         emit_download_manager_state_changed(&app, &manager_snapshot);
     }
@@ -179,6 +184,7 @@ pub async fn clear_download_history(
         let manager_snapshot = service.manager_snapshot();
         (removed_count, manager_snapshot)
     };
+    state.persist_download_snapshot(&manager_snapshot);
 
     emit_download_state(&app, &manager_snapshot);
 
