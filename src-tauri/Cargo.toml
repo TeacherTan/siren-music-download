@@ -33,6 +33,7 @@ tokio = { version = "1", features = ["full"] }
 time = { version = "0.3", features = ["formatting"] }
 walkdir = "2"
 tempfile = "3"
+tantivy = "0.22"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

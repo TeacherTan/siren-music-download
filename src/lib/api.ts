@@ -11,6 +11,7 @@ import type {
   CreateDownloadJobRequest, DownloadJobSnapshot, DownloadManagerSnapshot,
   NotificationPermissionState, AppPreferences, LocalInventorySnapshot,
   VerificationMode, LogViewerPage, LogViewerQuery, LogFileStatus,
+  SearchLibraryRequest, SearchLibraryResponse,
 } from './types';
 import type { OutputFormat } from './types';
 
@@ -77,6 +78,12 @@ export async function getSongLyrics(songCid: string): Promise<string | null> {
     createAlbumCacheTag(songDetail.albumCid),
   ]);
   return data;
+}
+
+export async function searchLibrary(
+  request: SearchLibraryRequest,
+): Promise<SearchLibraryResponse> {
+  return invoke<SearchLibraryResponse>('search_library', { request });
 }
 
 export async function playSong(

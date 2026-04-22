@@ -367,12 +367,29 @@
 - `artistLine: string | null`
 - `matchedFields: LibrarySearchHitField[]`
 
+### `LibraryIndexState`
+
+枚举值（12A）：
+
+- `notReady`
+- `building`
+- `stale`
+- `ready`
+
+说明：
+
+- `notReady`：当前没有可查询的本地 last-ready 搜索快照 / 索引
+- `building`：当前版本正在后台构建，且还没有可回退的 last-ready 结果
+- `stale`：存在 last-ready 本地结果，但尚未追平当前 inventory version
+- `ready`：当前查询命中了与当前 inventory version 对齐的本地索引
+
 ### `SearchLibraryResponse`
 
 - `items: SearchLibraryResultItem[]`
 - `total: number`
 - `query: string`
 - `scope: LibrarySearchScope`
+- `indexState: LibraryIndexState`
 
 ### `AppPreferences`
 
@@ -551,7 +568,9 @@
 - `scope` 必须为 `all | albums | songs` 之一
 - `limit` 默认 `20`，服务端上限 `50`；超出上限时截断，不报错
 - `offset` 默认 `0`，服务端上限 `500`；超出上限时按最大合法 offset 执行
-- 索引未就绪时的行为：返回空结果，`total = 0`
+- `total` 表示分页前总量
+- `ready + total = 0` 表示查询成功但无命中
+- `notReady | building | stale` 不能与普通空结果混淆，必须通过 `indexState` 显式表达
 
 返回约束：
 

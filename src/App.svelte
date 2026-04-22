@@ -37,6 +37,7 @@
     getLocalInventorySnapshot,
     listLogRecords,
     getLogFileStatus,
+    searchLibrary,
   } from "$lib/api";
   import {
     clearCache,
@@ -67,6 +68,9 @@
     DownloadHistoryScopeFilter,
     DownloadHistoryStatusFilter,
     DownloadHistoryKindFilter,
+    LibrarySearchScope,
+    SearchLibraryResponse,
+    SearchLibraryResultItem,
   } from "$lib/types";
   import { applyThemePalette, DEFAULT_THEME_PALETTE } from "$lib/theme";
   import { getDownloadBadgeLabel, shouldShowDownloadBadge } from "$lib/downloadBadge";
@@ -169,6 +173,13 @@
   // Download job system state
   let downloadManager = $state<DownloadManagerSnapshot | null>(null);
   let downloadPanelOpen = $state(false);
+  let librarySearchQuery = $state("");
+  let librarySearchScope = $state<LibrarySearchScope>("all");
+  let librarySearchLoading = $state(false);
+  let librarySearchResponse = $state<SearchLibraryResponse | null>(null);
+  let pendingScrollToSongCid = $state<string | null>(null);
+  let librarySearchRequestSeq = $state(0);
+  let librarySearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let downloadSearchQuery = $state("");
   let downloadScopeFilter = $state<DownloadHistoryScopeFilter>("all");
   let downloadStatusFilter = $state<DownloadHistoryStatusFilter>("all");
@@ -1666,11 +1677,27 @@
       unlistenAppError?.();
       mediaQuery.removeEventListener("change", updateReducedMotionPreference);
       window.removeEventListener("resize", handleWindowResize);
+      if (librarySearchDebounceTimer) {
+        clearTimeout(librarySearchDebounceTimer);
+      }
     };
   });
 
   $effect(() => {
     const songCid = currentSong?.cid ?? null;
+    const isCurrentActive = Boolean(songCid) && (isPlaying || isPaused || isLoading);
+    const previousSnapshot = lastPlaybackSnapshot;
+
+    if (
+      previousSnapshot.cid &&
+      previousSnapshot.active &&
+      !isCurrentActive &&
+      songCid === previousSnapshot.cid &&
+      duration > 0 &&
+      progress >= Math.max(0, duration - 0.25)
+    ) {
+      void handlePlaybackEnded(previousSnapshot.cid);
+    }
 
     if (!songCid) {
       lyricRequestSeq += 1;
@@ -1684,6 +1711,11 @@
       return;
     }
 
+    lastPlaybackSnapshot = {
+      cid: songCid,
+      active: isCurrentActive,
+    };
+
     if (songCid === lyricsSongCid) {
       return;
     }
@@ -1692,26 +1724,102 @@
   });
 
   $effect(() => {
-    const songCid = currentSong?.cid ?? null;
-    const playbackActive = isPlaying || isPaused || isLoading;
-    const hasReachedEnd =
-      !!songCid && duration > 0 && progress >= Math.max(0, duration - 0.35);
-    const shouldAutoAdvance =
-      !!songCid &&
-      songCid === lastPlaybackSnapshot.cid &&
-      lastPlaybackSnapshot.active &&
-      !playbackActive &&
-      hasReachedEnd;
-
-    lastPlaybackSnapshot = {
-      cid: songCid,
-      active: playbackActive,
-    };
-
-    if (shouldAutoAdvance) {
-      void handlePlaybackEnded(songCid);
+    if (!pendingScrollToSongCid || !selectedAlbum || loadingDetail) {
+      return;
     }
+
+    const expectedSongCid = pendingScrollToSongCid;
+    void tick().then(() => {
+      if (pendingScrollToSongCid !== expectedSongCid || !contentEl) {
+        return;
+      }
+
+      const row = contentEl.querySelector<HTMLElement>(
+        `[data-song-cid="${CSS.escape(expectedSongCid)}"]`,
+      );
+      if (!row) {
+        return;
+      }
+
+      row.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "center",
+      });
+      pendingScrollToSongCid = null;
+    });
   });
+
+  function setLibrarySearchQuery(query: string) {
+    librarySearchQuery = query;
+  }
+
+  function setLibrarySearchScope(scope: LibrarySearchScope) {
+    librarySearchScope = scope;
+  }
+
+  async function runLibrarySearch(query: string, scope: LibrarySearchScope) {
+    const trimmedQuery = query.trim();
+    const requestSeq = ++librarySearchRequestSeq;
+
+    if (!trimmedQuery) {
+      librarySearchLoading = false;
+      librarySearchResponse = null;
+      return;
+    }
+
+    librarySearchLoading = true;
+    try {
+      const response = await searchLibrary({
+        query: trimmedQuery,
+        scope,
+      });
+      if (requestSeq !== librarySearchRequestSeq) return;
+      librarySearchResponse = response;
+    } catch (error) {
+      if (requestSeq !== librarySearchRequestSeq) return;
+      const message = error instanceof Error ? error.message : String(error);
+      librarySearchResponse = {
+        items: [],
+        total: 0,
+        query: trimmedQuery,
+        scope,
+        indexState: "notReady",
+      };
+      notifyError(`搜索失败：${message}`);
+    } finally {
+      if (requestSeq !== librarySearchRequestSeq) return;
+      librarySearchLoading = false;
+    }
+  }
+
+  function scheduleLibrarySearch() {
+    if (librarySearchDebounceTimer) {
+      clearTimeout(librarySearchDebounceTimer);
+    }
+
+    const trimmedQuery = librarySearchQuery.trim();
+    if (!trimmedQuery) {
+      librarySearchRequestSeq += 1;
+      librarySearchLoading = false;
+      librarySearchResponse = null;
+      return;
+    }
+
+    librarySearchDebounceTimer = setTimeout(() => {
+      void runLibrarySearch(librarySearchQuery, librarySearchScope);
+    }, 220);
+  }
+
+  async function handleSelectSearchResult(item: SearchLibraryResultItem) {
+    const album = albums.find((candidate) => candidate.cid === item.albumCid);
+    if (!album) {
+      notifyError("未找到对应专辑，可能需要先刷新列表。");
+      return;
+    }
+
+    pendingScrollToSongCid = item.kind === "song" ? item.songCid : null;
+    await handleSelectAlbum(album);
+  }
 
   async function handleSelectAlbum(album: Album) {
     if (album.cid === selectedAlbumCid && !loadingDetail) {
@@ -1869,6 +1977,10 @@
   ) {
     await invalidateByTag(createInventoryCacheTag(inventoryVersion));
   }
+
+  $effect(() => {
+    scheduleLibrarySearch();
+  });
 
   async function refreshAlbumsList() {
     albums = await getAlbums();
@@ -2485,7 +2597,14 @@
       reducedMotion={prefersReducedMotion}
       {loadingAlbums}
       {errorMsg}
+      searchQuery={librarySearchQuery}
+      searchScope={librarySearchScope}
+      searchLoading={librarySearchLoading}
+      searchResponse={librarySearchResponse}
+      onSearchQueryChange={setLibrarySearchQuery}
+      onSearchScopeChange={setLibrarySearchScope}
       onSelect={handleSelectAlbum}
+      onSelectSearchResult={handleSelectSearchResult}
     />
   </OverlayScrollbarsComponent>
 

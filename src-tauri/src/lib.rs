@@ -20,6 +20,7 @@ mod logging;
 mod notification;
 mod player;
 mod preferences;
+mod search;
 mod theme;
 
 pub use app_state::AppState;

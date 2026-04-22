@@ -17,6 +17,7 @@ pub mod audio;
 pub mod download;
 pub mod downloader;
 pub mod local_inventory;
+pub mod search;
 
 // 重新导出公共 API，便于上层直接使用
 pub use api::{Album, AlbumDetail, ApiClient, SongDetail, SongEntry};
@@ -40,4 +41,10 @@ pub use local_inventory::{
     LocalInventoryScanProgressEvent, LocalInventorySnapshot, LocalInventoryStatus,
     LocalTrackDownloadStatus, LocalTrackEvidenceMatchRule, MatchedTrackEvidence,
     TrackDownloadBadge, VerificationMode,
+};
+pub use search::{
+    LibraryIndexState, LibrarySearchHitField, LibrarySearchScope, SearchLibraryRequest,
+    SearchLibraryResponse, SearchLibraryResultItem, SearchLibraryResultKind,
+    SEARCH_LIBRARY_DEFAULT_LIMIT, SEARCH_LIBRARY_DEFAULT_OFFSET, SEARCH_LIBRARY_MAX_LIMIT,
+    SEARCH_LIBRARY_MAX_OFFSET, SEARCH_LIBRARY_QUERY_MAX_LENGTH,
 };

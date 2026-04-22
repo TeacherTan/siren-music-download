@@ -145,6 +145,7 @@ fn main() {
             commands::library::extract_image_theme,
             commands::library::get_image_data_url,
             commands::library::get_default_output_dir,
+            commands::search::search_library,
             commands::playback::play_song,
             commands::playback::stop_playback,
             commands::playback::pause_playback,

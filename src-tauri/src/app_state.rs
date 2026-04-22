@@ -6,6 +6,7 @@ use crate::logging::{LogCenter, LogLevel, LogPayload};
 use crate::player::stream::{GrowingFileHandle, PlaybackInput, SampleBuffer};
 use crate::player::{AudioPlayer, PlaybackContext, PlaybackQueueEntry};
 use crate::preferences::{AppPreferences, PreferencesStore};
+use crate::search::LibrarySearchService;
 use anyhow::{Context, Result};
 use siren_core::{DownloadManagerSnapshot, DownloadService};
 use souvlaki::{MediaControlEvent, SeekDirection};
@@ -26,6 +27,7 @@ pub struct AppState {
     pub(crate) preferences_store: Arc<PreferencesStore>,
     pub(crate) preferences: Arc<StdMutex<AppPreferences>>,
     pub(crate) log_center: Arc<LogCenter>,
+    pub(crate) library_search_service: LibrarySearchService,
 }
 
 struct PreparedPlaybackInput {
@@ -51,8 +53,11 @@ impl AppState {
         );
         let local_inventory_service =
             LocalInventoryService::new(local_inventory_provenance_store.clone());
+        let search_data_dir = app_data_dir.join("library-search");
         let store = PreferencesStore::new(app_data_dir);
         let preferences = store.load(Some(log_center.as_ref()));
+        let library_search_service =
+            LibrarySearchService::new(search_data_dir, preferences.output_dir.clone());
         let state = Self {
             player: Arc::new(player),
             api: Arc::new(api),
@@ -63,6 +68,7 @@ impl AppState {
             preferences_store: Arc::new(store),
             preferences: Arc::new(StdMutex::new(preferences)),
             log_center,
+            library_search_service,
         };
         if loaded_download_session.should_persist {
             state.persist_download_snapshot(&loaded_download_session.snapshot);

@@ -139,6 +139,7 @@
 
 <motion.div
   class={`song-row${selectionMode ? ' is-selection-mode' : ''}${isSelected ? ' is-selected' : ''}`}
+  data-song-cid={song.cid}
   role="button"
   tabindex="0"
   animate={rowSurface}
