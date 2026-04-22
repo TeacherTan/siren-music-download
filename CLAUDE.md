@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 - 技术栈：Rust + Tauri 2 + Vite + Svelte 5
 - 形态：跨平台桌面应用（macOS / Windows / Linux）
-- 当前重点：Phase 1–10 已完成，当前主要聚焦 Phase 11 搜索 / 过滤 / 历史视图增强
+- 当前重点：Phase 1–10 已完成；Phase 11 前端首版下载历史增强已落地，后端 Phase 11 扩展仍按条件触发，当前主线逐步转向 Phase 12 库内搜索 / 过滤
 
 ## 常用命令
 
@@ -152,8 +152,8 @@ Cargo workspace
 
 ## 当前实现状态
 
-- **已完成**：Phase 1–10
-- **进行中 / 未完成**：Phase 11
+- **已完成**：Phase 1–10，以及基于现有完整快照的 Phase 11 前端首版下载历史增强
+- **进行中 / 未完成**：条件触发的 Phase 11 后端扩展、Phase 12
 - **已完成阶段明细**：见 `doc/BACKEND_COMPLETED_PHASES.md`
 - **待办阶段明细**：见 `doc/BACKEND_PENDING_PHASES.md`
 

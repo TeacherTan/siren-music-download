@@ -118,6 +118,12 @@ export type DownloadJobStatus =
   | 'failed'
   | 'cancelled';
 
+export type DownloadHistoryScopeFilter = 'all' | 'active' | 'history';
+
+export type DownloadHistoryStatusFilter = 'all' | DownloadJobStatus;
+
+export type DownloadHistoryKindFilter = 'all' | DownloadJobKind;
+
 export type DownloadTaskStatus =
   | 'queued'
   | 'preparing'

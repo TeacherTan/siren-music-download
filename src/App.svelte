@@ -64,9 +64,21 @@
     LogFileKind,
     LogFileStatus,
     LogViewerRecord,
+    DownloadHistoryScopeFilter,
+    DownloadHistoryStatusFilter,
+    DownloadHistoryKindFilter,
   } from "$lib/types";
   import { applyThemePalette, DEFAULT_THEME_PALETTE } from "$lib/theme";
   import { getDownloadBadgeLabel, shouldShowDownloadBadge } from "$lib/downloadBadge";
+  import { buildSelectionKey } from "$lib/features/download/formatters";
+  import {
+    hasCurrentDownloadOptions,
+    matchesJobKindFilter,
+    matchesJobScopeFilter,
+    matchesJobSearch,
+    matchesJobStatusFilter,
+    sortDownloadJobs,
+  } from "$lib/features/download/guards";
   import { motionStyles } from "$lib/actions/motionStyles";
   import { envStore } from "$lib/features/env/store.svelte";
   import { shellStore } from "$lib/features/shell/store.svelte";
@@ -157,6 +169,10 @@
   // Download job system state
   let downloadManager = $state<DownloadManagerSnapshot | null>(null);
   let downloadPanelOpen = $state(false);
+  let downloadSearchQuery = $state("");
+  let downloadScopeFilter = $state<DownloadHistoryScopeFilter>("all");
+  let downloadStatusFilter = $state<DownloadHistoryStatusFilter>("all");
+  let downloadKindFilter = $state<DownloadHistoryKindFilter>("all");
   // Track current download speed for active tasks
   let taskSpeedMap = $state<Map<string, number>>(new Map());
 
@@ -224,6 +240,20 @@
     if (selectedSongCount === 1) return "已选择 1 首";
     return `已选择 ${selectedSongCount} 首`;
   });
+
+  const filteredDownloadJobs = $derived.by(() => {
+    const normalizedQuery = downloadSearchQuery.trim().toLocaleLowerCase();
+    return sortDownloadJobs(downloadJobs).filter((job) => {
+      return (
+        matchesJobSearch(job, normalizedQuery) &&
+        matchesJobScopeFilter(job, downloadScopeFilter) &&
+        matchesJobStatusFilter(job, downloadStatusFilter) &&
+        matchesJobKindFilter(job, downloadKindFilter)
+      );
+    });
+  });
+
+  const hasDownloadHistory = $derived.by(() => downloadJobs.length > 0);
 
   function setContentViewport(instance: OverlayScrollbars) {
     const viewport = instance.elements().viewport;
@@ -638,10 +668,6 @@
     }
   }
 
-  function buildSelectionKey(songCids: string[]): string {
-    return [...songCids].sort().join(",");
-  }
-
   function isSongSelected(songCid: string): boolean {
     return selectedSongCids.includes(songCid);
   }
@@ -686,13 +712,6 @@
     }
   }
 
-  function hasCurrentDownloadOptions(job: DownloadJobSnapshot): boolean {
-    return (
-      job.options.format === format &&
-      job.options.downloadLyrics === downloadLyrics
-    );
-  }
-
   function findSelectionDownloadJob(
     songCids: string[],
   ): DownloadJobSnapshot | null {
@@ -703,7 +722,9 @@
       downloadManager.jobs.find((job) => {
         if (job.kind !== "selection") return false;
         if (job.status !== "queued" && job.status !== "running") return false;
-        if (!hasCurrentDownloadOptions(job)) return false;
+        if (!hasCurrentDownloadOptions(job, outputDir, format, downloadLyrics)) {
+          return false;
+        }
         return (
           buildSelectionKey(job.tasks.map((task) => task.songCid)) === targetKey
         );
@@ -741,7 +762,9 @@
       downloadManager.jobs.find((job) => {
         if (job.kind !== "album") return false;
         if (job.status !== "queued" && job.status !== "running") return false;
-        if (!hasCurrentDownloadOptions(job)) return false;
+        if (!hasCurrentDownloadOptions(job, outputDir, format, downloadLyrics)) {
+          return false;
+        }
         return job.tasks.some((task) => task.albumCid === albumCid);
       }) ?? null
     );
@@ -795,7 +818,7 @@
       downloadManager.jobs.find(
         (job) =>
           (job.status === "queued" || job.status === "running") &&
-          hasCurrentDownloadOptions(job) &&
+          hasCurrentDownloadOptions(job, outputDir, format, downloadLyrics) &&
           job.tasks.some((task) => task.songCid === songCid),
       ) ?? null
     );
@@ -804,7 +827,7 @@
   async function performSongDownload(songCid: string) {
     const existingJob = getSongDownloadJob(songCid);
     if (existingJob) {
-      downloadPanelOpen = true;
+      openDownloadPanel();
       return existingJob.id;
     }
 
@@ -817,13 +840,13 @@
         songCids: [songCid],
         albumCid: null,
         options: {
-          outputDir: "",
+          outputDir,
           format,
           downloadLyrics,
         },
       };
       const job = await createDownloadJob(request);
-      downloadPanelOpen = true;
+      openDownloadPanel(true);
       return job.id;
     } finally {
       if (downloadingSongCid === songCid) {
@@ -851,7 +874,7 @@
   async function performAlbumDownload(album: AlbumDetail) {
     const existingJob = findAlbumDownloadJob(album.cid);
     if (existingJob) {
-      downloadPanelOpen = true;
+      openDownloadPanel();
       return existingJob.id;
     }
 
@@ -866,13 +889,13 @@
         songCids: [],
         albumCid: album.cid,
         options: {
-          outputDir: "",
+          outputDir,
           format,
           downloadLyrics,
         },
       };
       const job = await createDownloadJob(request);
-      downloadPanelOpen = true;
+      openDownloadPanel(true);
       return job.id;
     } finally {
       if (downloadingAlbumCid === album.cid) {
@@ -886,7 +909,7 @@
 
     const existingJob = findSelectionDownloadJob(songCids);
     if (existingJob) {
-      downloadPanelOpen = true;
+      openDownloadPanel();
       return existingJob.id;
     }
 
@@ -902,13 +925,13 @@
         songCids,
         albumCid: null,
         options: {
-          outputDir: "",
+          outputDir,
           format,
           downloadLyrics,
         },
       };
       const job = await createDownloadJob(request);
-      downloadPanelOpen = true;
+      openDownloadPanel(true);
       clearSongSelection();
       selectionModeEnabled = false;
       return job.id;
@@ -2001,6 +2024,21 @@
     return task.status === "writing" ? "正在整理文件..." : "正在接收数据...";
   }
 
+  function resetDownloadFilters() {
+    downloadSearchQuery = "";
+    downloadScopeFilter = "all";
+    downloadStatusFilter = "all";
+    downloadKindFilter = "all";
+  }
+
+  function openDownloadPanel(resetFilters = false) {
+    if (resetFilters) {
+      resetDownloadFilters();
+    }
+    downloadPanelOpen = true;
+    settingsOpen = false;
+  }
+
   function getTaskErrorLabel(task: DownloadTaskSnapshot): string | null {
     if (!task.error) return null;
 
@@ -2467,8 +2505,12 @@
       {downloadPanelOpen}
       onRefresh={handleRefresh}
       onOpenDownloads={() => {
-        downloadPanelOpen = !downloadPanelOpen;
-        if (downloadPanelOpen) settingsOpen = false;
+        const nextOpen = !downloadPanelOpen;
+        if (nextOpen) {
+          openDownloadPanel();
+          return;
+        }
+        downloadPanelOpen = false;
       }}
       onOpenSettings={() => {
         settingsOpen = !settingsOpen;
@@ -3029,7 +3071,12 @@
 
   <DownloadTasksSheet
     bind:open={downloadPanelOpen}
-    {downloadManager}
+    jobs={filteredDownloadJobs}
+    hasDownloadHistory={hasDownloadHistory}
+    bind:searchQuery={downloadSearchQuery}
+    bind:scopeFilter={downloadScopeFilter}
+    bind:statusFilter={downloadStatusFilter}
+    bind:kindFilter={downloadKindFilter}
     {canClearDownloadHistory}
     {getJobProgress}
     {getJobProgressText}
