@@ -4,6 +4,12 @@ export function shouldShowDownloadBadge(status: LocalTrackDownloadStatus): boole
   return status !== 'missing' && status !== 'unknown';
 }
 
+export function shouldShowAlbumListDownloadBadge(
+  status: LocalTrackDownloadStatus
+): boolean {
+  return status !== 'partial' && shouldShowDownloadBadge(status);
+}
+
 export function getDownloadBadgeLabel(status: LocalTrackDownloadStatus): string {
   switch (status) {
     case 'verified':

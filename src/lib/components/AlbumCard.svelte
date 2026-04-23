@@ -3,7 +3,7 @@
   import { motionStyles } from '$lib/actions/motionStyles';
   import type { Album } from '$lib/types';
   import { lazyLoad } from '$lib/lazyLoad';
-  import { getDownloadBadgeLabel, shouldShowDownloadBadge } from '$lib/downloadBadge';
+  import { getDownloadBadgeLabel, shouldShowAlbumListDownloadBadge } from '$lib/downloadBadge';
 
   interface Props {
     album: Album;
@@ -24,7 +24,7 @@
 
   const showCoverLift = $derived.by(() => isHovered || isFocused);
   const showDownloadBadge = $derived.by(() =>
-    shouldShowDownloadBadge(album.download.downloadStatus)
+    shouldShowAlbumListDownloadBadge(album.download.downloadStatus)
   );
 
   const downloadBadgeLabel = $derived.by(() =>
