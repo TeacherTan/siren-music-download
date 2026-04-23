@@ -10,60 +10,102 @@ use std::sync::{Arc, Mutex};
 const DEFAULT_BASE_URL: &str = "https://monster-siren.hypergryph.com/api";
 const DEFAULT_CACHE_CAPACITY: usize = 100;
 
+/// 专辑列表查询返回的基础条目。
+///
+/// 适用于专辑列表页、搜索结果中的专辑摘要展示，或在不需要完整曲目明细时
+/// 进行轻量展示。
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Album {
+    /// 专辑 CID。
     pub cid: String,
+    /// 专辑名称。
     pub name: String,
+    /// 专辑封面地址。
     #[serde(rename = "coverUrl")]
     pub cover_url: String,
+    /// 专辑艺术家列表。
     #[serde(alias = "artistes")]
     pub artists: Vec<String>,
+    /// 本地库存补充后的下载徽标信息。
     #[serde(default)]
     pub download: AlbumDownloadBadge,
 }
 
+/// 单张专辑的完整详情快照。
+///
+/// 适用于专辑详情页、批量下载前的曲目枚举，或需要结合曲目列表推导本地库存
+/// 状态的场景。
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AlbumDetail {
+    /// 专辑 CID。
     pub cid: String,
+    /// 专辑名称。
     pub name: String,
+    /// 专辑简介。
     pub intro: Option<String>,
+    /// 专辑归属信息。
     pub belong: String,
+    /// 标准封面地址。
     #[serde(rename = "coverUrl")]
     pub cover_url: String,
+    /// 深色封面地址。
     #[serde(rename = "coverDeUrl")]
     pub cover_de_url: Option<String>,
+    /// 专辑艺术家列表；上游缺失时可能为空。
     #[serde(alias = "artistes")]
     pub artists: Option<Vec<String>>,
+    /// 本地库存补充后的专辑下载徽标。
     #[serde(default)]
     pub download: AlbumDownloadBadge,
+    /// 专辑内歌曲列表。
     pub songs: Vec<SongEntry>,
 }
 
+/// 专辑详情中的歌曲摘要条目。
+///
+/// 适用于在专辑上下文中展示曲目列表；当需要单曲下载地址、歌词或 MV 信息时，
+/// 应进一步调用 [`ApiClient::get_song_detail`] 获取完整详情。
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SongEntry {
+    /// 歌曲 CID。
     pub cid: String,
+    /// 歌曲名称。
     pub name: String,
+    /// 艺术家列表。
     #[serde(alias = "artistes")]
     pub artists: Vec<String>,
+    /// 本地库存补充后的歌曲下载徽标。
     #[serde(default)]
     pub download: TrackDownloadBadge,
 }
 
+/// 单曲的完整详情快照。
+///
+/// 适用于播放、下载、歌词抓取或展示 MV 入口等需要访问单曲级资源地址的场景。
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SongDetail {
+    /// 歌曲 CID。
     pub cid: String,
+    /// 歌曲名称。
     pub name: String,
+    /// 所属专辑 CID。
     #[serde(rename = "albumCid")]
     pub album_cid: String,
+    /// 原始音频下载地址。
     #[serde(rename = "sourceUrl")]
     pub source_url: String,
+    /// 歌词地址；未提供时为空。
     #[serde(rename = "lyricUrl")]
     pub lyric_url: Option<String>,
+    /// MV 地址；未提供时为空。
     #[serde(rename = "mvUrl")]
     pub mv_url: Option<String>,
+    /// MV 封面地址；未提供时为空。
     #[serde(rename = "mvCoverUrl")]
     pub mv_cover_url: Option<String>,
+    /// 艺术家列表。
     pub artists: Vec<String>,
+    /// 本地库存补充后的歌曲下载徽标。
     #[serde(default)]
     pub download: TrackDownloadBadge,
 }
@@ -76,6 +118,10 @@ struct ApiResponse<T> {
     data: T,
 }
 
+/// 用于访问 Monster Siren 公开接口的强类型客户端。
+///
+/// 该客户端统一封装了专辑/单曲查询、远端资源下载与响应缓存逻辑，适合作为
+/// 上层播放器、下载服务或 Tauri command 的共享数据入口。
 #[derive(Clone)]
 pub struct ApiClient {
     client: Client,
@@ -84,6 +130,10 @@ pub struct ApiClient {
 }
 
 impl ApiClient {
+    /// 使用默认基址与缓存容量创建 API 客户端。
+    ///
+    /// 适用于生产环境默认接入；返回值为可复用的客户端实例。若 HTTP 客户端构造
+    /// 失败，会直接返回错误。
     pub fn new() -> Result<Self> {
         Self::new_with_config(DEFAULT_BASE_URL.to_string(), DEFAULT_CACHE_CAPACITY)
     }
@@ -172,25 +222,47 @@ impl ApiClient {
         Ok(data)
     }
 
+    /// 清空内部响应缓存。
+    ///
+    /// 适用于上游资源已更新、需要强制重新拉取，或测试场景下希望消除缓存影响时
+    /// 调用。该操作只影响内存缓存，不会触发任何网络请求。
     pub fn clear_response_cache(&self) {
         if let Ok(mut cache) = self.response_cache.lock() {
             cache.clear();
         }
     }
 
+    /// 获取专辑列表。
+    ///
+    /// 返回值为上游当前可见的专辑列表；当缓存命中时不会发起新的网络请求。
     pub async fn get_albums(&self) -> Result<Vec<Album>> {
         self.get_cached_api_data("albums").await
     }
 
+    /// 根据专辑 CID 获取专辑详情。
+    ///
+    /// 入参 `album_cid` 为上游专辑唯一标识；返回值包含专辑元信息与曲目列表。
+    /// 当缓存命中时会直接复用内存中的响应快照。
     pub async fn get_album_detail(&self, album_cid: &str) -> Result<AlbumDetail> {
         self.get_cached_api_data(&format!("album/{album_cid}/detail"))
             .await
     }
 
+    /// 根据歌曲 CID 获取单曲详情。
+    ///
+    /// 入参 `cid` 为上游歌曲唯一标识；返回值包含下载地址、歌词地址与关联专辑信息。
     pub async fn get_song_detail(&self, cid: &str) -> Result<SongDetail> {
         self.get_cached_api_data(&format!("song/{cid}")).await
     }
 
+    /// 以流式方式下载远端资源。
+    ///
+    /// 入参 `url` 为待下载资源地址；`on_chunk` 会在每个分块到达后收到当前分块、
+    /// 累计已下载字节数与可选总大小。当回调返回 `false` 时会提前停止下载，并把当前
+    /// 中断视为正常结束而不是错误。
+    ///
+    /// 适用于边下载边处理的场景，例如实时写盘、播放器边缓冲边解码，或需要自行控制
+    /// 取消时机的流水线下载。
     pub async fn download_stream(
         &self,
         url: &str,
@@ -214,6 +286,13 @@ impl ApiClient {
         Ok(())
     }
 
+    /// 下载完整字节内容，并在可命中时复用内部缓存。
+    ///
+    /// 入参 `url` 为待下载资源地址；`on_progress` 会收到累计已下载字节数与可选总大小。
+    /// 返回值为完整资源字节；若缓存命中，会立即以“已完成”进度回调一次。
+    ///
+    /// 适用于封面、歌词附件或整段音频等需要一次性拿到完整载荷的场景；对于超大文件
+    /// 或希望边下载边消费的调用方，应改用 [`ApiClient::download_stream`]。
     pub async fn download_bytes(
         &self,
         url: &str,
@@ -230,6 +309,11 @@ impl ApiClient {
         Ok(bytes)
     }
 
+    /// 下载文本内容，并自动移除 UTF-8 BOM。
+    ///
+    /// 入参 `url` 为文本资源地址；返回值为按 UTF-8 宽松解码后的字符串内容。
+    /// 该接口内部会先下载完整字节，再统一做 BOM 清理，因此适用于歌词等体量较小的
+    /// 文本资源，不适合超大文本流式处理。
     pub async fn download_text(&self, url: &str) -> Result<String> {
         let bytes = self.download_bytes(url, |_, _| {}).await?;
         Ok(String::from_utf8_lossy(&bytes)

@@ -8,6 +8,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+/// 播放解码线程上报致命错误时使用的回调类型。
 pub type PlaybackErrorHandler = Arc<dyn Fn(String) + Send + Sync>;
 use symphonia::core::audio::SampleBuffer as SymphoniaSampleBuffer;
 use symphonia::core::codecs::{
@@ -20,14 +21,21 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
 
+/// 描述解码后或输出端期望的音频格式。
 #[derive(Debug, Clone, Copy)]
 pub struct AudioFormat {
+    /// 音频通道数，至少为 1。
     pub channels: u16,
+    /// 采样率，单位为 Hz。
     pub sample_rate: u32,
+    /// 音频总时长，单位为秒。
     pub duration_secs: f64,
 }
 
 impl AudioFormat {
+    /// 返回经过最小值归一化后的音频格式。
+    ///
+    /// 该方法会将通道数和采样率修正到至少为 `1`，并把时长裁剪到不小于 `0.0`。
     pub fn normalized(self) -> Self {
         Self {
             channels: self.channels.max(1),
@@ -37,30 +45,43 @@ impl AudioFormat {
     }
 }
 
+/// 可被播放器读取的同步音频流抽象。
 pub trait AudioReadStream: Read + Seek + Send + Sync {}
 impl<T> AudioReadStream for T where T: Read + Seek + Send + Sync {}
 
 type BoxedAudioReader = Box<dyn AudioReadStream>;
 
+/// 播放器可消费的输入来源。
 #[derive(Clone)]
 pub enum PlaybackInput {
+    /// 已完整缓存到本地磁盘的音频文件。
     CachedFile(PathBuf),
+    /// 正在增长中的缓存文件句柄，适用于边下载边播放。
     GrowingFile(GrowingFileHandle),
 }
 
 impl PlaybackInput {
+    /// 使用完整缓存文件构造播放输入。
     pub fn cached_file(path: PathBuf) -> Self {
         Self::CachedFile(path)
     }
 
+    /// 使用增长中的缓存文件构造播放输入。
     pub fn growing_file(handle: GrowingFileHandle) -> Self {
         Self::GrowingFile(handle)
     }
 
+    /// 探测当前输入的音频格式。
+    ///
+    /// 返回值包含通道数、采样率和可推断出的总时长。
     pub fn inspect_format(&self) -> Result<AudioFormat> {
         inspect_audio_reader(self.open_reader()?, self.build_hint())
     }
 
+    /// 启动后台解码线程，将输入流转换为目标采样缓冲。
+    ///
+    /// `source_format` 为探测得到的源格式，`target_format` 为输出后端协商后的目标格式。
+    /// 返回的线程句柄会在内部持续写入 `sample_buffer`，直到解码结束、出错或收到停止信号。
     pub fn spawn_decode_worker(
         &self,
         source_format: AudioFormat,
@@ -111,6 +132,7 @@ impl PlaybackInput {
     }
 }
 
+/// 供边下载边播放场景共享的增长文件句柄。
 #[derive(Clone)]
 pub struct GrowingFileHandle {
     path: PathBuf,
@@ -125,6 +147,9 @@ struct GrowingFileState {
 }
 
 impl GrowingFileHandle {
+    /// 创建新的增长文件句柄及其对应的写入文件。
+    ///
+    /// 调用方可持续向返回的 `File` 写入音频数据，并通过当前句柄向读取侧广播可读长度变化。
     pub fn new(path: PathBuf) -> Result<(Self, File)> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).with_context(|| {
@@ -148,6 +173,7 @@ impl GrowingFileHandle {
         ))
     }
 
+    /// 以读取端模式打开当前增长文件。
     pub fn open_reader(&self) -> Result<GrowingFileReader> {
         let file = OpenOptions::new()
             .read(true)
@@ -165,10 +191,12 @@ impl GrowingFileHandle {
         })
     }
 
+    /// 返回底层缓存文件路径。
     pub fn path(&self) -> &Path {
         &self.path
     }
 
+    /// 向增长文件追加一个字节块，并更新读取侧可见长度。
     pub fn append_chunk(&self, writer: &mut File, chunk: &[u8]) -> Result<()> {
         writer
             .write_all(chunk)
@@ -184,6 +212,9 @@ impl GrowingFileHandle {
         Ok(())
     }
 
+    /// 标记增长文件已完成写入。
+    ///
+    /// 调用后读取侧将不再等待新的可读长度。
     pub fn mark_complete(&self) {
         let (lock, condvar) = &*self.state;
         let mut state = lock.lock().unwrap();
@@ -191,6 +222,9 @@ impl GrowingFileHandle {
         condvar.notify_all();
     }
 
+    /// 标记增长文件写入失败，并附带错误消息。
+    ///
+    /// 调用后读取侧将在下次读取或等待时收到错误。
     pub fn mark_error(&self, message: impl Into<String>) {
         let (lock, condvar) = &*self.state;
         let mut state = lock.lock().unwrap();
@@ -200,6 +234,9 @@ impl GrowingFileHandle {
     }
 }
 
+/// 增长文件的读取端。
+///
+/// 读取操作会在可读长度不足时阻塞等待，直到写入端追加数据或标记完成/失败。
 pub struct GrowingFileReader {
     file: File,
     position: u64,
@@ -267,6 +304,7 @@ impl Seek for GrowingFileReader {
     }
 }
 
+/// 解码线程与输出线程之间共享的采样缓冲区。
 #[derive(Clone)]
 pub struct SampleBuffer {
     inner: Arc<(Mutex<SampleBufferState>, Condvar)>,
@@ -279,6 +317,7 @@ struct SampleBufferState {
 }
 
 impl SampleBuffer {
+    /// 创建一个空的采样缓冲区。
     pub fn new() -> Self {
         Self {
             inner: Arc::new((
@@ -292,6 +331,7 @@ impl SampleBuffer {
         }
     }
 
+    /// 追加一批已解码的浮点采样。
     pub fn push(&self, samples: &[f32]) {
         if samples.is_empty() {
             return;
@@ -302,6 +342,7 @@ impl SampleBuffer {
         condvar.notify_all();
     }
 
+    /// 标记采样缓冲区不会再写入新的数据。
     pub fn finish(&self) {
         let (lock, condvar) = &*self.inner;
         let mut state = lock.lock().unwrap();
@@ -309,6 +350,7 @@ impl SampleBuffer {
         condvar.notify_all();
     }
 
+    /// 标记采样缓冲区失败并唤醒等待中的消费者。
     pub fn fail(&self, message: impl Into<String>) {
         let (lock, condvar) = &*self.inner;
         let mut state = lock.lock().unwrap();
@@ -317,6 +359,9 @@ impl SampleBuffer {
         condvar.notify_all();
     }
 
+    /// 从缓冲区中弹出尽可能多的采样写入 `output`。
+    ///
+    /// 返回值会说明本次写入了多少采样，以及缓冲区是否已经结束或失败。
     pub fn pop_into(&self, output: &mut [f32]) -> PopStatus {
         let (lock, _) = &*self.inner;
         let mut state = lock.lock().unwrap();
@@ -339,6 +384,9 @@ impl SampleBuffer {
         }
     }
 
+    /// 等待缓冲区中至少出现指定数量的采样。
+    ///
+    /// 当缓冲区报错、播放被停止，或流结束时仍没有任何可播放采样时返回错误。
     pub fn wait_for_samples(&self, minimum_samples: usize, stop_flag: &AtomicBool) -> Result<()> {
         let (lock, condvar) = &*self.inner;
         let mut state = lock.lock().unwrap();
@@ -367,9 +415,13 @@ impl SampleBuffer {
     }
 }
 
+/// 一次从采样缓冲区弹出后的结果摘要。
 pub struct PopStatus {
+    /// 本次实际写入输出缓冲区的采样数。
     pub written: usize,
+    /// 当前缓冲区是否已经完全结束且没有剩余采样。
     pub finished: bool,
+    /// 若生产端失败，这里携带对应错误消息。
     pub error: Option<String>,
 }
 
@@ -406,6 +458,9 @@ struct OpenedAudioReader {
     audio_format: AudioFormat,
 }
 
+/// 探测一个已打开音频读取器的格式信息。
+///
+/// 该函数会选取默认或首个可解码音轨，并返回播放器后续协商所需的基础参数。
 pub fn inspect_audio_reader(reader: BoxedAudioReader, hint: Hint) -> Result<AudioFormat> {
     Ok(open_audio_reader(reader, hint)?.audio_format)
 }

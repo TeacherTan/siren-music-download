@@ -1,13 +1,35 @@
 //! Siren Music Download 后端库。
 //!
-//! 这个 library crate 暴露后端模块的最小公共边界，供 binary target 和未来的
-//! integration tests 使用。
+//! 这个 crate 是桌面应用后端的宿主层入口，负责把 `siren_core` 提供的领域能力接入
+//! Tauri 运行时，并组合成可供 `main.rs`、命令注册、事件桥接与集成测试复用的最小公共边界。
+//! 如果 `siren_core` 关注的是“平台无关的核心能力”，那么这里关注的就是“应用进程内如何把
+//! 这些能力接线成一个真正可运行的桌面后端”。
 //!
-//! # 设计原则
+//! # 首页导航
 //!
-//! - 只暴露 `main.rs` 启动和 Tauri command 注册所需的最小入口
-//! - 内部实现细节（helper、normalization、worker pipeline）保持私有
-//! - 不为测试便利扩大可见性
+//! - [`AppState`]：聚合 API 客户端、播放器、下载服务、偏好与日志中心的应用级共享状态。
+//! - [`commands`]：所有对前端暴露的 Tauri command 包装层，是 UI 调用后端的主要入口。
+//! - [`initialize_download_bridge`]：后台下载批次消费循环与事件广播桥接的启动入口。
+//! - [`spawn_inventory_scan`]：本地库存扫描的公开触发入口。
+//! - [`LogLevel`]、[`LogPayload`]：供后端内部与宿主层复用的结构化日志类型。
+//!
+//! # 什么时候看这个 crate
+//!
+//! - 当你要理解某个 Tauri command 如何访问后端状态，应该先看 [`commands`] 与 [`AppState`]。
+//! - 当你要排查下载任务为什么会在前端持续收到事件，应该看 [`initialize_download_bridge`]。
+//! - 当你要补集成测试或启动 wiring，而不想深入所有私有模块时，这里提供了最小必要入口。
+//!
+//! # 设计边界
+//!
+//! - 只暴露 `main.rs` 启动、命令注册和测试复用真正需要的公共入口。
+//! - 内部实现细节（helper、normalization、worker pipeline）保持私有，避免把临时结构扩散成契约。
+//! - 不为测试便利扩大可见性；若某项能力需要被外部使用，应通过明确公共入口暴露，而不是直接泄漏内部模块。
+//!
+//! # 与 `siren_core` 的关系
+//!
+//! 该 crate 主要负责宿主层编排：状态装配、Tauri command、事件发射、系统通知、播放器后端和偏好持久化。
+//! 业务语义本身仍尽量下沉到 `siren_core`，因此当你需要修改下载模型、搜索结果或音频写盘契约时，
+//! 通常应该优先检查 `siren_core` 的公开 API，再回到这里看宿主层如何接入。
 
 mod app_state;
 mod audio_cache;
@@ -23,7 +45,19 @@ mod preferences;
 mod search;
 mod theme;
 
+/// 应用级共享状态入口。
+///
+/// 适用于 `main.rs` 启动 wiring、Tauri command 注入，以及需要访问聚合后端能力的集成测试入口。
 pub use app_state::AppState;
+/// 初始化下载桥接执行循环。
+///
+/// 适用于应用启动后拉起下载任务消费与事件广播主循环。
 pub use downloads::bridge::initialize as initialize_download_bridge;
+/// 启动一次本地库存扫描。
+///
+/// 适用于启动后首次扫描、偏好变更后的重扫，或外部调用方主动触发库存刷新。
 pub use local_inventory::spawn_inventory_scan;
+/// 日志等级与日志载荷公共类型。
+///
+/// 适用于构造结构化日志并通过公共后端入口统一记录。
 pub use logging::{LogLevel, LogPayload};

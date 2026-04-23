@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// 统一应用偏好模型（TOML 序列化格式：snake_case 字段名）
+/// 统一应用偏好模型（TOML 序列化格式：camelCase 字段名）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
-    /// Schema version for future migrations. Defaults to 1 if missing.
+    /// 预留给未来迁移使用的模式版本；缺失时默认按 `1` 处理。
     #[serde(default)]
     pub(crate) schema_version: i32,
     pub(crate) output_format: String,

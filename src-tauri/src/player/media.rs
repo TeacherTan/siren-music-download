@@ -10,12 +10,14 @@ use tauri::AppHandle;
 #[cfg(target_os = "windows")]
 use tauri::Manager;
 
+/// 系统媒体会话封装。
 pub struct MediaSession {
     controls: Mutex<MediaControls>,
     last_progress_second: Mutex<Option<u64>>,
 }
 
 impl MediaSession {
+    /// 创建新的系统媒体会话实例。
     pub fn new(app: &AppHandle) -> Result<Self> {
         let controls = MediaControls::new(platform_config(app)?)
             .context("Failed to create system media controls")?;
@@ -25,6 +27,7 @@ impl MediaSession {
         })
     }
 
+    /// 绑定系统媒体控制事件处理器。
     pub fn attach<F>(&self, handler: F) -> Result<()>
     where
         F: Fn(MediaControlEvent) + Send + 'static,
@@ -36,6 +39,7 @@ impl MediaSession {
             .context("Failed to attach system media controls handler")
     }
 
+    /// 把当前播放器状态同步到系统媒体会话。
     pub fn sync_state(&self, state: &PlayerState, progress_only: bool) {
         let mut controls = self.controls.lock().unwrap();
 

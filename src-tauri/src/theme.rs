@@ -8,17 +8,17 @@ const MIN_ALPHA: u8 = 96;
 const SAMPLE_SIZE: u32 = 64;
 const QUANT_STEP: u8 = 24;
 
-/// Accent colors derived from album artwork.
+/// 从专辑封面中提取出的主题强调色集合。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThemePalette {
-    /// Primary accent color in hex notation such as `#fa2d48`.
+    /// 主强调色的十六进制表示，例如 `#fa2d48`。
     pub accent_hex: String,
-    /// Hover-state accent color derived from the primary accent.
+    /// 基于主强调色推导出的悬停态颜色。
     pub accent_hover_hex: String,
-    /// Primary accent color as RGB bytes.
+    /// 主强调色的 RGB 三通道字节值。
     pub accent_rgb: [u8; 3],
-    /// Hover-state accent color as RGB bytes.
+    /// 悬停态强调色的 RGB 三通道字节值。
     pub accent_hover_rgb: [u8; 3],
 }
 
@@ -51,11 +51,10 @@ impl BucketAccumulator {
     }
 }
 
-/// Extract an accent palette from raw image bytes.
+/// 从原始图片字节中提取可用于界面的强调色方案。
 ///
-/// The algorithm downsamples the source image, ignores near-transparent pixels,
-/// biases toward saturated mid-tone colors, and then normalizes the selected
-/// accent so it remains readable on the light player surfaces used by the app.
+/// 该算法会先对图片降采样、忽略近乎透明的像素，偏向选择饱和度较高的中间色，
+/// 再对结果做对比度归一化，以保证在应用的浅色播放器表面上仍具备可读性。
 pub fn extract_theme_palette(bytes: &[u8]) -> Result<ThemePalette> {
     let image = image::load_from_memory(bytes)
         .context("Failed to decode album artwork")?

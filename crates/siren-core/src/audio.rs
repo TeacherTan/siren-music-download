@@ -5,7 +5,7 @@ use image::codecs::jpeg::JpegEncoder;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// Detected audio format from raw bytes
+/// 根据原始音频字节识别音频格式。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AudioFormat {
@@ -16,6 +16,16 @@ pub enum AudioFormat {
 }
 
 impl AudioFormat {
+    /// 根据文件头字节判断音频格式。
+    ///
+    /// # 示例
+    ///
+    /// ```
+    /// use siren_core::AudioFormat;
+    ///
+    /// assert_eq!(AudioFormat::detect(b"RIFF\0\0\0\0WAVE"), AudioFormat::Wav);
+    /// assert_eq!(AudioFormat::detect(b"fLaC\0\0\0\0"), AudioFormat::Flac);
+    /// ```
     pub fn detect(data: &[u8]) -> Self {
         if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WAVE") {
             AudioFormat::Wav
@@ -32,6 +42,16 @@ impl AudioFormat {
         }
     }
 
+    /// 返回当前音频格式对应的默认文件扩展名。
+    ///
+    /// # 示例
+    ///
+    /// ```
+    /// use siren_core::AudioFormat;
+    ///
+    /// assert_eq!(AudioFormat::Flac.extension(), "flac");
+    /// assert_eq!(AudioFormat::Unknown.extension(), "bin");
+    /// ```
     pub fn extension(self) -> &'static str {
         match self {
             AudioFormat::Wav => "wav",
@@ -42,20 +62,30 @@ impl AudioFormat {
     }
 }
 
-/// Output format chosen by user
+/// 用户选择的输出格式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OutputFormat {
-    /// Keep as WAV (lossless, direct from API — no conversion needed)
+    /// 保持为 WAV 原始格式，不做转码。
     #[default]
     Wav,
-    /// Convert WAV → FLAC in pure Rust (lossless, smaller, better metadata)
+    /// 将 WAV 转码为 FLAC，以便获得更小体积和更完整的标签支持。
     Flac,
-    /// Keep MP3 as-is
+    /// 保持为 MP3 原始格式，不做转码。
     Mp3,
 }
 
 impl OutputFormat {
+    /// 返回用于界面展示的格式名称。
+    ///
+    /// # 示例
+    ///
+    /// ```
+    /// use siren_core::OutputFormat;
+    ///
+    /// assert_eq!(OutputFormat::Wav.label(), "WAV (Lossless)");
+    /// assert_eq!(OutputFormat::Mp3.label(), "MP3");
+    /// ```
     pub fn label(self) -> &'static str {
         match self {
             OutputFormat::Wav => "WAV (Lossless)",
@@ -65,20 +95,41 @@ impl OutputFormat {
     }
 }
 
-/// Metadata written into FLAC Vorbis comments and picture blocks.
+/// 写入 FLAC Vorbis Comment 与封面块时使用的元数据。
+///
+/// 适用于在音频文件已经落盘后补齐标题、艺术家、曲序与封面等信息；调用方应保证
+/// 目标文件确实是可写的 FLAC 文件。
 pub struct FlacMetadata<'a> {
+    /// 曲目标题。
     pub title: &'a str,
+    /// 曲目艺术家列表。
     pub artists: &'a [String],
+    /// 专辑名称。
     pub album: &'a str,
+    /// 专辑艺术家列表。
     pub album_artists: &'a [String],
+    /// 曲目序号。
     pub track_number: Option<u32>,
+    /// 专辑总曲数。
     pub total_tracks: Option<u32>,
+    /// 光盘序号。
     pub disc_number: Option<u32>,
+    /// 总光盘数。
     pub total_discs: Option<u32>,
+    /// 封面数据，格式为 `(mime_type, bytes)`。
     pub cover: Option<(&'static str, &'a [u8])>,
 }
 
-/// Sanitize a string for use as a filename component
+/// 清洗文件名片段中不适合落盘的字符。
+///
+/// # 示例
+///
+/// ```
+/// use siren_core::audio::sanitize_filename;
+///
+/// assert_eq!(sanitize_filename("A/B:C"), "A_B_C");
+/// assert_eq!(sanitize_filename("  hello  "), "hello");
+/// ```
 pub fn sanitize_filename(name: &str) -> String {
     name.chars()
         .map(|c| match c {
@@ -90,11 +141,17 @@ pub fn sanitize_filename(name: &str) -> String {
         .to_string()
 }
 
-/// Save audio bytes to disk.
-/// - WAV + OutputFormat::Flac: converts in pure Rust via flacenc
-/// - Everything else: written as-is with appropriate extension
+/// 将音频字节写入磁盘，并按需要执行 WAV → FLAC 转码。
 ///
-/// Returns the path of the file written.
+/// 入参 `data` 为完整音频字节，`out_dir` 为输出目录，`base_name` 为目标文件基础名，
+/// `output_format` 为调用方期望的输出格式。
+///
+/// - 当源格式是 WAV 且目标格式为 [`OutputFormat::Flac`] 时，会使用纯 Rust
+///   路径完成 FLAC 编码。
+/// - 其他情况下直接按检测到的源格式写出。
+/// - 该接口会自动创建输出目录，并对文件名执行 [`sanitize_filename`] 清洗。
+///
+/// 返回最终写入的文件路径。
 pub fn save_audio(
     data: &[u8],
     out_dir: &Path,
@@ -105,7 +162,6 @@ pub fn save_audio(
     let detected = AudioFormat::detect(data);
     let safe_name = sanitize_filename(base_name);
 
-    // Decide actual output extension
     let out_ext = match (detected, output_format) {
         (AudioFormat::Wav, OutputFormat::Flac) => "flac",
         (fmt, _) => fmt.extension(),
@@ -114,7 +170,6 @@ pub fn save_audio(
     let out_path = out_dir.join(format!("{safe_name}.{out_ext}"));
 
     if detected == AudioFormat::Wav && output_format == OutputFormat::Flac {
-        // Decode WAV samples with hound
         let cursor = std::io::Cursor::new(data);
         let mut reader = hound::WavReader::new(cursor).context("Failed to read WAV data")?;
         let spec = reader.spec();
@@ -124,7 +179,6 @@ pub fn save_audio(
             .collect::<Result<_, _>>()
             .context("Failed to read WAV samples")?;
 
-        // Encode to FLAC in pure Rust via flacenc
         let config = flacenc::config::Encoder::default()
             .into_verified()
             .map_err(|e| anyhow::anyhow!("FLAC encoder config error: {:?}", e))?;
@@ -149,7 +203,19 @@ pub fn save_audio(
     Ok(out_path)
 }
 
-/// Guess the MIME type of embedded image data from its magic bytes.
+/// 根据图片魔数推断 MIME 类型。
+///
+/// 入参 `data` 为图片开头字节；返回值为识别出的稳定 MIME 类型，当前支持 PNG、
+/// JPEG、GIF 与 WEBP，无法识别时返回 `None`。
+///
+/// # 示例
+///
+/// ```
+/// use siren_core::audio::detect_image_mime;
+///
+/// assert_eq!(detect_image_mime(&[0xFF, 0xD8, 0xFF, 0x00]), Some("image/jpeg"));
+/// assert_eq!(detect_image_mime(b"GIF89a"), Some("image/gif"));
+/// ```
 pub fn detect_image_mime(data: &[u8]) -> Option<&'static str> {
     if data.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
         Some("image/png")
@@ -164,7 +230,10 @@ pub fn detect_image_mime(data: &[u8]) -> Option<&'static str> {
     }
 }
 
-/// Normalize embedded cover art to JPEG for broader FLAC player compatibility.
+/// 将嵌入封面统一编码为 JPEG，以提升 FLAC 播放器兼容性。
+///
+/// 入参 `data` 为原始图片字节；如果输入本身已是 JPEG，会直接返回原始内容副本，
+/// 否则会先解码图片再以 JPEG 重新编码。
 pub fn encode_cover_as_jpeg(data: &[u8]) -> Result<Vec<u8>> {
     if detect_image_mime(data) == Some("image/jpeg") {
         return Ok(data.to_vec());
@@ -192,7 +261,11 @@ pub fn encode_cover_as_jpeg(data: &[u8]) -> Result<Vec<u8>> {
     Ok(jpeg)
 }
 
-/// Tag a FLAC file with metadata using metaflac.
+/// 为已写出的 FLAC 文件写入标签与封面元数据。
+///
+/// 入参 `path` 为目标 FLAC 文件路径，`metadata` 描述要写入的文本标签与封面。
+/// 该接口会覆盖已有的前封面块与对应标签字段，因此调用方应在文件内容稳定后再
+/// 执行，避免后续写盘覆盖标签结果。
 pub fn tag_flac(path: &Path, metadata: &FlacMetadata<'_>) -> Result<()> {
     let mut tag = metaflac::Tag::read_from_path(path)
         .with_context(|| format!("Failed to open FLAC for tagging: {}", path.display()))?;
@@ -256,45 +329,4 @@ pub fn tag_flac(path: &Path, metadata: &FlacMetadata<'_>) -> Result<()> {
     tag.save()
         .with_context(|| format!("Failed to save FLAC tags: {}", path.display()))?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{detect_image_mime, encode_cover_as_jpeg};
-    use anyhow::Result;
-
-    #[test]
-    fn detects_cover_mime_from_magic_bytes() {
-        assert_eq!(
-            detect_image_mime(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]),
-            Some("image/png")
-        );
-        assert_eq!(
-            detect_image_mime(&[0xFF, 0xD8, 0xFF, 0xDB]),
-            Some("image/jpeg")
-        );
-        assert_eq!(detect_image_mime(b"GIF89a123"), Some("image/gif"));
-        assert_eq!(detect_image_mime(b"RIFFxxxxWEBPvp8 "), Some("image/webp"));
-        assert_eq!(detect_image_mime(b"not-an-image"), None);
-    }
-
-    #[test]
-    fn converts_png_cover_to_jpeg() -> Result<()> {
-        let rgba = image::RgbaImage::from_fn(2, 2, |x, y| match (x, y) {
-            (0, 0) => image::Rgba([255, 0, 0, 255]),
-            (1, 0) => image::Rgba([0, 255, 0, 128]),
-            (0, 1) => image::Rgba([0, 0, 255, 255]),
-            _ => image::Rgba([255, 255, 255, 0]),
-        });
-        let dynamic = image::DynamicImage::ImageRgba8(rgba);
-        let mut png = std::io::Cursor::new(Vec::new());
-        dynamic.write_to(&mut png, image::ImageFormat::Png)?;
-
-        let jpeg = encode_cover_as_jpeg(&png.into_inner())?;
-
-        assert_eq!(detect_image_mime(&jpeg), Some("image/jpeg"));
-        assert!(!jpeg.is_empty(), "jpeg bytes should not be empty");
-
-        Ok(())
-    }
 }

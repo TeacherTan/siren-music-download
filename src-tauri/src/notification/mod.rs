@@ -1,4 +1,4 @@
-//! System notification integration for download completion and playback events.
+//! 下载完成与播放状态切换的系统通知集成。
 
 mod cover;
 #[cfg(not(target_os = "macos"))]
@@ -13,15 +13,13 @@ use siren_core::download::model::{DownloadJobKind, DownloadJobSnapshot, Download
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-/// Tracks the last notified song CID to prevent duplicate playback notifications.
+/// 记录最近一次已发送播放通知的歌曲 CID，用于避免同一首歌重复通知。
 static LAST_NOTIFIED_SONG: Mutex<Option<String>> = Mutex::new(None);
 
-/// Trigger a system notification when a download job reaches a terminal state.
+/// 当下载批次进入终态时触发系统通知。
 ///
-/// Notification content varies by job kind and status:
-/// - Single song: "Song Name" / "下载完成"
-/// - Album (completed): "Album Name" / "专辑下载完成（N 首歌曲）"
-/// - Album (partially failed): "Album Name" / "专辑下载完成（N 首成功，M 首失败）"
+/// 只有在用户偏好开启下载完成通知，且批次状态为 `Completed` 或
+/// `PartiallyFailed` 时才会真正发送；通知文案会根据批次类型与完成结果自动调整。
 pub fn notify_download_completed(app: &AppHandle, job: &DownloadJobSnapshot) {
     let state = app.state::<AppState>();
     let prefs = state.preferences();
@@ -79,10 +77,10 @@ pub fn notify_download_completed(app: &AppHandle, job: &DownloadJobSnapshot) {
     }
 }
 
-/// Trigger a system notification when playback switches to a new song.
+/// 当播放切换到新歌曲时触发系统通知。
 ///
-/// Notification shows: song name (title) and artists (body).
-/// Deduplicates by song CID to avoid repeated notifications for the same track.
+/// 通知标题为歌曲名、正文为艺术家列表，并会按“最近一次已通知的歌曲 CID”做去重，
+/// 以避免同一首歌在连续播放状态更新中被重复通知。
 pub fn notify_playback_changed(app: &AppHandle, player_state: &PlayerState) {
     let app_state = app.state::<AppState>();
     let prefs = app_state.preferences();
@@ -165,7 +163,7 @@ pub fn notify_playback_changed(app: &AppHandle, player_state: &PlayerState) {
     });
 }
 
-/// Send a test notification to verify the notification pipeline is working.
+/// 发送一条测试通知，用于验证通知链路是否可用。
 pub fn notify_test(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {

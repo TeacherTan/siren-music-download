@@ -12,17 +12,20 @@ use std::sync::Arc;
 use time::format_description::well_known::Iso8601;
 use time::OffsetDateTime;
 
+/// 为下载批次与子任务生成进程内唯一 ID 的简单生成器。
 #[derive(Default)]
 pub struct IdGenerator {
     counter: AtomicU64,
 }
 
 impl IdGenerator {
+    /// 生成新的下载批次 ID。
     pub fn next_job_id(&self) -> String {
         let n = self.counter.fetch_add(1, Ordering::Relaxed);
         format!("job-{}-{n}", unix_millis())
     }
 
+    /// 生成新的下载任务 ID。
     pub fn next_task_id(&self) -> String {
         let n = self.counter.fetch_add(1, Ordering::Relaxed);
         format!("task-{}-{n}", unix_millis())
@@ -92,11 +95,20 @@ impl DownloadServiceState {
     }
 }
 
+/// 一次任务状态更新后的批次回写结果。
+///
+/// 适用于执行桥接层在更新任务状态后，同时决定是否需要立即持久化管理器快照。
 pub struct TaskStateUpdate {
+    /// 更新后的批次快照。
     pub snapshot: DownloadJobSnapshot,
+    /// 当前变更是否值得立即持久化到磁盘。
     pub should_persist: bool,
 }
 
+/// 下载批次管理服务。
+///
+/// 负责创建批次、维护任务队列、处理取消/重试与生成前端可消费的管理器快照；
+/// 不直接执行下载 I/O，而是为桥接层和执行器提供状态管理能力。
 #[derive(Default)]
 pub struct DownloadService {
     state: DownloadServiceState,
@@ -104,10 +116,17 @@ pub struct DownloadService {
 }
 
 impl DownloadService {
+    /// 创建一个空的下载服务实例。
+    ///
+    /// 适用于应用冷启动或测试初始化；返回值中不包含任何已恢复批次。
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// 从已持久化的管理器快照恢复下载服务状态。
+    ///
+    /// 适用于应用重启后的下载恢复；返回值会重建内部任务实体，并根据快照重新推导
+    /// 批次状态，但不会自动恢复正在执行中的活动任务标记。
     pub fn from_manager_snapshot(snapshot: DownloadManagerSnapshot) -> Self {
         Self {
             state: DownloadServiceState {
@@ -120,10 +139,16 @@ impl DownloadService {
         }
     }
 
+    /// 获取当前下载管理器快照。
+    ///
+    /// 适用于前端全量同步、持久化落盘或测试断言；返回值为当前内存状态的只读拷贝。
     pub fn snapshot(&self) -> DownloadManagerSnapshot {
         self.state.snapshot()
     }
 
+    /// 根据批次 ID 获取单个批次快照。
+    ///
+    /// 入参 `job_id` 为目标批次标识；若批次不存在则返回 `None`。
     pub fn get_job(&self, job_id: &str) -> Option<DownloadJobSnapshot> {
         self.state
             .jobs
@@ -132,6 +157,10 @@ impl DownloadService {
             .map(DownloadJob::to_snapshot)
     }
 
+    /// 根据请求构建一个新的下载批次并加入队列。
+    ///
+    /// 入参 `request` 描述批次类型、目标歌曲与下载选项；该方法会查询上游 API 补齐
+    /// 任务标题与专辑上下文，成功时返回已入队的批次快照。
     pub async fn create_job(
         &mut self,
         api: &ApiClient,
@@ -302,6 +331,10 @@ impl DownloadService {
         Ok((title, tasks))
     }
 
+    /// 取消整个下载批次。
+    ///
+    /// 如果该批次正在执行，会同时触发当前活跃任务的取消信号；返回值为取消后的批次
+    /// 快照。若批次不存在则返回 `None`。
     pub fn cancel_job(&mut self, job_id: &str) -> Option<DownloadJobSnapshot> {
         let is_active_job = self.state.active_job_id.as_deref() == Some(job_id);
         if is_active_job {
@@ -320,6 +353,7 @@ impl DownloadService {
         Some(job.to_snapshot())
     }
 
+    /// 取消指定批次中的单个子任务。
     pub fn cancel_task(&mut self, job_id: &str, task_id: &str) -> Option<DownloadJobSnapshot> {
         let is_active_job = self.state.active_job_id.as_deref() == Some(job_id);
         let is_active_task = self.state.active_task_id.as_deref() == Some(task_id);
@@ -338,6 +372,7 @@ impl DownloadService {
         Some(job.to_snapshot())
     }
 
+    /// 重试整个下载批次中可重试的子任务。
     pub fn retry_job(&mut self, job_id: &str) -> Option<DownloadJobSnapshot> {
         let is_active_job = self.state.active_job_id.as_deref() == Some(job_id);
         if is_active_job {
@@ -360,6 +395,7 @@ impl DownloadService {
         Some(job.to_snapshot())
     }
 
+    /// 重试单个子任务；若批次已处于终态，会一并重新排队该批次。
     pub fn retry_task(&mut self, job_id: &str, task_id: &str) -> Option<DownloadJobSnapshot> {
         let is_active_task = self.state.active_task_id.as_deref() == Some(task_id)
             && self.state.active_job_id.as_deref() == Some(job_id);
@@ -389,6 +425,7 @@ impl DownloadService {
         Some(job.to_snapshot())
     }
 
+    /// 清理已结束的历史批次，返回被移除的数量。
     pub fn clear_history(&mut self) -> usize {
         let before = self.state.jobs.len();
         self.state.jobs.retain(|job| {
@@ -408,8 +445,10 @@ impl DownloadService {
     // loop)
     // -------------------------------------------------------------------------
 
-    /// Atomically claim the next queued job and mark it as running.
-    /// Returns the job snapshot if a queued job was found and started.
+    /// 原子地领取下一个排队中的批次并将其标记为运行中。
+    ///
+    /// 适用于执行桥接循环准备启动新批次时调用；若当前没有可启动批次，返回 `None`。
+    /// 返回值为已切换到运行态后的批次快照。
     pub fn start_next_queued_job(&mut self) -> Option<DownloadJobSnapshot> {
         let job = self.state.jobs.iter_mut().find(|job| {
             job.status == DownloadJobStatus::Queued && self.state.active_job_id.is_none()
@@ -421,8 +460,10 @@ impl DownloadService {
         Some(job.to_snapshot())
     }
 
-    /// Pop the next queued task from the given job.
-    /// Returns the task if one was found and marked as preparing.
+    /// 从指定批次中取出下一个排队任务，并立即标记为准备中。
+    ///
+    /// 适用于工作线程准备执行单个任务前领取任务；返回值同时包含任务副本与更新后的
+    /// 批次快照，便于调用方同步广播状态。
     pub fn pop_next_task(
         &mut self,
         job_id: &str,
@@ -438,7 +479,10 @@ impl DownloadService {
         Some((task.clone(), job.to_snapshot()))
     }
 
-    /// Update the state of a specific task within a job.
+    /// 更新指定批次内某个任务的状态与附带产物信息。
+    ///
+    /// 调用方可按需传入进度、输出路径或错误信息；对于已经进入终态的任务，若尝试
+    /// 切换到其他状态会返回 `None`，以避免状态回退破坏不变量。
     pub fn update_task_state(
         &mut self,
         job_id: &str,
@@ -491,8 +535,10 @@ impl DownloadService {
         })
     }
 
-    /// Finalize a job after all tasks have been processed.
-    /// Derives the final job status from task statuses.
+    /// 在当前批次所有任务处理完成后收尾，并推导最终批次状态。
+    ///
+    /// 若用户此前已显式取消批次，会保留取消态而不是被任务聚合结果覆盖；返回值为
+    /// 收尾后的最终批次快照。
     pub fn finish_job(&mut self, job_id: &str) -> Option<DownloadJobSnapshot> {
         let job = self.state.jobs.iter_mut().find(|job| job.id == job_id)?;
 
@@ -513,6 +559,10 @@ impl DownloadService {
         Some(job.to_snapshot())
     }
 
+    /// 返回当前活动任务对应的取消标志。
+    ///
+    /// 只有当传入的批次 ID 与任务 ID 正好命中当前执行中的任务时才会返回标志；
+    /// 否则返回 `None`，表示当前没有可用于中断执行中的活跃任务的取消标志。
     pub fn active_task_cancel_flag(&self, job_id: &str, task_id: &str) -> Option<Arc<AtomicBool>> {
         if self.state.active_job_id.as_deref() != Some(job_id) {
             return None;
@@ -530,7 +580,7 @@ impl DownloadService {
         }
     }
 
-    /// Check if there are any queued jobs waiting to be processed.
+    /// 返回当前是否仍有等待执行的排队批次。
     pub fn has_queued_jobs(&self) -> bool {
         self.state
             .jobs
@@ -538,12 +588,12 @@ impl DownloadService {
             .any(|job| job.status == DownloadJobStatus::Queued)
     }
 
-    /// Get a snapshot of the current manager state.
+    /// 返回当前下载管理器的整体快照。
     pub fn manager_snapshot(&self) -> DownloadManagerSnapshot {
         self.state.snapshot()
     }
 
-    /// Get the output directory for a specific job.
+    /// 返回指定批次当前配置的输出目录。
     pub fn job_output_dir(&self, job_id: &str) -> Option<String> {
         let job = self.state.jobs.iter().find(|job| job.id == job_id)?;
         Some(job.options.output_dir.clone())

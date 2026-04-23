@@ -218,6 +218,7 @@ pub(crate) fn emit_local_inventory_scan_progress(
     let _ = app.emit(LOCAL_INVENTORY_SCAN_PROGRESS, event);
 }
 
+/// 启动一次本地库存扫描任务，并通过事件持续回传进度与最终状态。
 pub fn spawn_inventory_scan(
     app: AppHandle,
     state: AppState,

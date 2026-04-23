@@ -10,28 +10,27 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager};
 
-/// Queue entry shared between the frontend and backend playback context.
+/// 前后端共享的播放队列条目。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueEntry {
-    /// Song identifier passed back into `play_song`.
+    /// 重新传回 `play_song` 时使用的歌曲 CID。
     pub cid: String,
-    /// Display name shown in the queue UI.
+    /// 队列与播放器界面展示用的歌曲名。
     pub name: String,
-    /// Artist names rendered in the player and queue flyout.
+    /// 队列与播放器界面展示用的艺术家列表。
     pub artists: Vec<String>,
-    /// Optional artwork URL used for media session metadata.
+    /// 系统媒体会话使用的可选封面地址。
     pub cover_url: Option<String>,
 }
 
-/// Playback order sent by the frontend when it starts playback from an album or
-/// a shuffled queue.
+/// 前端发起播放时传入的播放队列上下文。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackContext {
-    /// Ordered queue entries available for previous/next navigation.
+    /// 可用于上一首/下一首导航的有序队列。
     pub entries: Vec<PlaybackQueueEntry>,
-    /// Frontend-selected index at the time playback starts.
+    /// 播放开始时前端选中的索引。
     pub current_index: usize,
 }
 
@@ -93,7 +92,10 @@ impl PlaybackQueueState {
     }
 }
 
-/// Backend playback controller used by Tauri commands and media-session events.
+/// Tauri command 与系统媒体控制共用的后端播放控制器。
+///
+/// 负责维护播放器状态、驱动底层播放后端、同步系统媒体会话，并为前端提供统一的
+/// 播放控制入口；同一应用生命周期内通常只需要持有一个实例。
 pub struct AudioPlayer {
     app: AppHandle,
     state: Arc<Mutex<PlayerState>>,
@@ -107,6 +109,10 @@ pub struct AudioPlayer {
 }
 
 impl AudioPlayer {
+    /// 创建新的播放器控制器实例。
+    ///
+    /// 该方法会初始化底层播放后端、空白播放器状态与默认音量；返回值可直接用于
+    /// Tauri command 注入和媒体控制绑定。
     pub fn new(app: AppHandle) -> Result<Self> {
         let backend = create_backend()?;
         Ok(Self {
@@ -122,10 +128,14 @@ impl AudioPlayer {
         })
     }
 
+    /// 返回底层 Tauri 应用句柄。
+    ///
+    /// 适用于需要向外部组件转交 `AppHandle`、发出事件或访问应用级状态的场景。
     pub fn app_handle(&self) -> AppHandle {
         self.app.clone()
     }
 
+    /// 绑定系统媒体控制事件处理器。
     pub fn bind_media_controls<F>(&self, handler: F) -> Result<()>
     where
         F: Fn(MediaControlEvent) + Send + 'static,
@@ -137,6 +147,7 @@ impl AudioPlayer {
         Ok(())
     }
 
+    /// 准备当前播放会话对应的队列上下文。
     pub fn prepare_playback_context(
         &self,
         context: Option<PlaybackContext>,
@@ -156,6 +167,7 @@ impl AudioPlayer {
         self.sync_navigation_flags();
     }
 
+    /// 选择下一首队列条目并更新导航标志。
     pub fn select_next_entry(&self) -> Option<PlaybackQueueEntry> {
         let next = {
             let mut queue = self.queue.lock().unwrap();
@@ -165,6 +177,7 @@ impl AudioPlayer {
         next
     }
 
+    /// 选择上一首队列条目并更新导航标志。
     pub fn select_previous_entry(&self) -> Option<PlaybackQueueEntry> {
         let previous = {
             let mut queue = self.queue.lock().unwrap();
@@ -174,6 +187,10 @@ impl AudioPlayer {
         previous
     }
 
+    /// 初始化新的加载会话并重置当前播放状态。
+    ///
+    /// 该方法会先停止已有会话，再写入歌曲元数据、初始进度、初始时长与当前音量，
+    /// 并返回新的会话 ID 供后续流式播放阶段校验。
     pub fn begin_loading_session(
         &self,
         song_cid: String,
@@ -211,6 +228,10 @@ impl AudioPlayer {
         Ok(session_id)
     }
 
+    /// 与底层播放后端协商最终输出音频格式。
+    ///
+    /// 传入的 `source_format` 通常来自解码器探测结果，返回值表示当前音频设备或
+    /// 后端实现可稳定消费的实际输出格式。
     pub fn negotiate_output_format(&self, source_format: AudioFormat) -> Result<AudioFormat> {
         self.backend
             .lock()
@@ -218,6 +239,10 @@ impl AudioPlayer {
             .negotiate_output_format(source_format)
     }
 
+    /// 启动当前会话的流式播放并返回最终时长。
+    ///
+    /// 该方法会校验会话 ID 是否仍有效，向后端注册进度、完成与错误回调，并在
+    /// 启动成功后把播放器状态切换为播放中。
     pub fn start_stream_playback(
         &self,
         session_id: u64,
@@ -363,6 +388,9 @@ impl AudioPlayer {
         })
     }
 
+    /// 暂停当前播放中的会话。
+    ///
+    /// 仅当播放器处于非加载中的播放态时才会真正调用后端暂停；否则直接返回成功。
     pub fn pause(&self) -> Result<()> {
         let should_pause = {
             let state = self.state.lock().unwrap();
@@ -388,6 +416,9 @@ impl AudioPlayer {
         Ok(())
     }
 
+    /// 恢复当前已暂停的会话。
+    ///
+    /// 仅当播放器仍保留歌曲上下文且状态为已暂停时才会真正调用后端恢复；否则直接返回成功。
     pub fn resume(&self) -> Result<()> {
         let should_resume = {
             let state = self.state.lock().unwrap();
@@ -413,6 +444,9 @@ impl AudioPlayer {
         Ok(())
     }
 
+    /// 根据当前状态在暂停与恢复之间切换。
+    ///
+    /// 若既不处于播放中也不处于已暂停状态，则该方法不会启动新的播放流程。
     pub fn toggle_playback(&self) -> Result<()> {
         let state = self.get_state();
         if state.is_paused {
@@ -424,6 +458,9 @@ impl AudioPlayer {
         }
     }
 
+    /// 将指定会话标记为失败并清空播放器状态。
+    ///
+    /// 仅当 `session_id` 仍为当前活跃会话时才会生效，通常用于流式解码或输出阶段发生不可恢复错误时。
     pub fn fail_session(&self, session_id: u64) {
         if self.active_session_id.load(Ordering::SeqCst) != session_id {
             return;
@@ -442,19 +479,31 @@ impl AudioPlayer {
         emit_state_and_sync(&self.app, &self.state, &self.media_session);
     }
 
+    /// 返回当前播放会话共享的停止信号。
+    ///
+    /// 后台下载、解码或输出线程可通过该标志感知会话是否已被停止。
     pub fn stop_signal(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.stop_flag)
     }
 
+    /// 返回当前播放会话共享的暂停信号。
+    ///
+    /// 后台解码线程可通过该标志在不销毁会话的前提下暂时挂起处理。
     pub fn pause_signal(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.pause_flag)
     }
 
+    /// 判断给定会话是否仍为当前活跃播放会话。
+    ///
+    /// 当会话 ID 不匹配或已收到停止信号时返回 `false`。
     pub fn is_session_active(&self, session_id: u64) -> bool {
         self.active_session_id.load(Ordering::SeqCst) == session_id
             && !self.stop_flag.load(Ordering::SeqCst)
     }
 
+    /// 停止当前播放并将播放器状态重置为默认值。
+    ///
+    /// 该方法会推进会话 ID，使旧回调与后台线程自动失效。
     pub fn stop(&self) -> Result<()> {
         self.stop_flag.store(true, Ordering::SeqCst);
         self.pause_flag.store(false, Ordering::SeqCst);
@@ -470,10 +519,14 @@ impl AudioPlayer {
         Ok(())
     }
 
+    /// 返回当前播放器状态快照。
     pub fn get_state(&self) -> PlayerState {
         self.state.lock().unwrap().clone()
     }
 
+    /// 设置播放器音量并返回裁剪后的实际值。
+    ///
+    /// 输入音量会被限制在 `0.0..=1.0` 范围内，同时同步更新对外状态与媒体会话。
     pub fn set_volume(&self, volume: f64) -> f64 {
         let safe_volume = volume.clamp(0.0, 1.0);
         *self.volume.lock().unwrap() = safe_volume;

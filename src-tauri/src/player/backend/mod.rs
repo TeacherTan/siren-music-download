@@ -3,9 +3,12 @@ use anyhow::Result;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
+/// 音频播放后端抽象。
 pub trait PlaybackBackend: Send {
+    /// 根据源格式协商后端实际接受的输出格式。
     fn negotiate_output_format(&self, source_format: AudioFormat) -> Result<AudioFormat>;
 
+    /// 启动音频播放流。
     fn play_stream(
         &mut self,
         format: AudioFormat,
@@ -17,15 +20,22 @@ pub trait PlaybackBackend: Send {
         error_handler: PlaybackErrorHandler,
     ) -> Result<()>;
 
+    /// 暂停播放。
     fn pause(&mut self) -> Result<()>;
 
+    /// 恢复播放。
     fn resume(&mut self) -> Result<()>;
 
+    /// 停止播放并释放当前流。
     fn stop(&mut self) -> Result<()>;
 }
 
 pub mod cpal;
 
+/// 创建默认播放后端实现。
+///
+/// 当前默认返回基于 CPAL 的后端；若底层音频设备或输出流初始化失败，会直接返回
+/// 错误给上层调用方。
 pub fn create_backend() -> Result<Box<dyn PlaybackBackend>> {
     Ok(Box::new(cpal::CpalBackend::new()?))
 }

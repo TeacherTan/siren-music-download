@@ -1,4 +1,4 @@
-//! macOS-specific notification implementation using notify-rust.
+//! 基于 notify-rust 的 macOS 专用通知实现。
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -6,10 +6,9 @@ use tauri::AppHandle;
 
 use notify_rust::{set_application, Notification};
 
-/// Ensures `set_application` is called at most once per process lifetime.
-/// The underlying library has a global lock that errors on repeated calls.
-/// In release mode, we skip this call entirely — the app bundle's identifier
-/// is automatically used by the notification system.
+/// 确保 `set_application` 在每个进程生命周期内最多只调用一次。
+/// 底层库对重复调用持有全局锁限制；在 release 模式下会完全跳过该调用，
+/// 因为通知系统会自动使用 app bundle 自带的标识符。
 static APP_IDENTITY_SET: AtomicBool = AtomicBool::new(false);
 
 fn set_app_identity(_app: &AppHandle) -> Result<(), String> {

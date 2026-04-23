@@ -1,32 +1,32 @@
 use serde::Serialize;
 
-/// Snapshot emitted to the frontend for playback state updates.
+/// 向前端与系统媒体会话广播的播放器状态快照。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerState {
-    /// Currently loaded song identifier, or `None` when idle.
+    /// 当前已加载歌曲的 CID；空闲时为 `None`。
     pub song_cid: Option<String>,
-    /// Currently loaded song name, or `None` when idle.
+    /// 当前已加载歌曲名；空闲时为 `None`。
     pub song_name: Option<String>,
-    /// Artists for the current song.
+    /// 当前歌曲的艺术家列表。
     pub artists: Vec<String>,
-    /// Current artwork URL used by the UI and system media session.
+    /// 供 UI 与系统媒体会话使用的当前封面地址。
     pub cover_url: Option<String>,
-    /// Whether audio is actively playing.
+    /// 是否正在主动播放音频。
     pub is_playing: bool,
-    /// Whether playback is paused without unloading the current song.
+    /// 是否在保留当前歌曲上下文的前提下处于暂停态。
     pub is_paused: bool,
-    /// Whether the backend is still preparing audio for playback.
+    /// 后端是否仍在为当前歌曲准备可播放音频。
     pub is_loading: bool,
-    /// Whether the current queue can move to a previous entry.
+    /// 当前队列是否可以切换到上一项。
     pub has_previous: bool,
-    /// Whether the current queue can move to a next entry.
+    /// 当前队列是否可以切换到下一项。
     pub has_next: bool,
-    /// Playback progress in seconds.
+    /// 当前播放进度，单位为秒。
     pub progress: f64,
-    /// Total track duration in seconds when known.
+    /// 当前歌曲总时长，已知时单位为秒。
     pub duration: f64,
-    /// Playback volume clamped to the `0.0..=1.0` range.
+    /// 当前播放音量，范围固定为 `0.0..=1.0`。
     pub volume: f64,
 }
 

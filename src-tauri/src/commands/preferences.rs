@@ -5,13 +5,21 @@ use std::path::Path;
 use tauri::State;
 use tauri_plugin_notification::NotificationExt;
 
-/// 获取当前偏好
+/// 获取当前偏好。
+///
+/// 适用于设置面板初始化、应用启动后恢复用户配置，或在导入/保存后重新同步偏好。
+/// 返回值为当前生效的完整偏好快照。
+/// 该接口只读取当前内存中的已生效偏好，不会触发磁盘写入或额外副作用。
 #[tauri::command]
 pub async fn get_preferences(state: State<'_, AppState>) -> Result<AppPreferences, String> {
     Ok(state.preferences())
 }
 
-/// 设置偏好（验证后落盘）
+/// 设置偏好（验证后落盘）。
+///
+/// 适用于用户在设置面板保存配置后的正式提交。
+/// 入参 `preferences` 为完整偏好对象；返回值为已经通过校验并写入后的最终偏好。
+/// 若下载目录发生变化，该接口会自动触发一次本地库存重新扫描；调用方不需要再额外手动发起扫描。
 #[tauri::command]
 pub async fn set_preferences(
     app: tauri::AppHandle,
@@ -34,7 +42,11 @@ pub async fn set_preferences(
     Ok(preferences)
 }
 
-/// 导出偏好到指定路径
+/// 导出偏好到指定路径。
+///
+/// 适用于备份当前配置、跨设备迁移设置，或在重装前导出用户偏好。
+/// 入参 `output_path` 为导出文件目标路径；返回值为本次导出的偏好内容。
+/// 该接口不会改变当前运行中的偏好状态，只会把现有配置写出到指定文件。
 #[tauri::command]
 pub async fn export_preferences(
     state: State<'_, AppState>,
@@ -46,7 +58,11 @@ pub async fn export_preferences(
     Ok(prefs)
 }
 
-/// 从指定路径导入偏好
+/// 从指定路径导入偏好。
+///
+/// 适用于恢复先前备份、迁移其他设备配置，或批量恢复用户设置。
+/// 入参 `input_path` 为待导入文件路径；返回值为导入后已经生效的偏好。
+/// 该接口会覆盖当前偏好并写回本地存储；若导入后的下载目录发生变化，也会自动触发本地库存重新扫描。
 #[tauri::command]
 pub async fn import_preferences(
     app: tauri::AppHandle,
@@ -70,6 +86,11 @@ pub async fn import_preferences(
 }
 
 // 以下两个保留（系统状态，非偏好）
+/// 获取通知权限状态字符串。
+///
+/// 适用于设置面板展示当前系统通知授权状态，或在发送测试通知前决定是否提示用户授权。
+/// 返回值为标准化后的权限状态字符串，如 `granted`、`denied` 或 `prompt`。
+/// 该接口反映的是当前系统权限快照；若用户刚在系统设置中修改权限，调用方应重新调用以获取最新状态。
 #[tauri::command]
 pub fn get_notification_permission_state(state: State<'_, AppState>) -> Result<String, String> {
     let app = state.player.app_handle();
@@ -86,6 +107,11 @@ pub fn get_notification_permission_state(state: State<'_, AppState>) -> Result<S
     .to_string())
 }
 
+/// 发送一条测试通知，用于验证系统通知链路。
+///
+/// 适用于用户在设置面板主动验证通知是否可达的场景。
+/// 成功时返回空值。
+/// 该接口会向系统真正发送一条可见通知，调用方应只在用户明确触发时调用，避免把测试通知当成静默探测手段。
 #[tauri::command]
 pub fn send_test_notification(state: State<'_, AppState>) -> Result<(), String> {
     let app = state.player.app_handle();

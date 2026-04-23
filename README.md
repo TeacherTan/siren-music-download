@@ -73,6 +73,14 @@ bun run tauri:build
 cargo check --workspace
 ```
 
+文档相关命令（按需执行）：
+
+```bash
+cargo doc -p siren_core --no-deps
+cargo doc -p siren-music-download --lib --no-deps --document-private-items
+cargo doc -p siren-music-download --bin siren-music-download --no-deps --document-private-items
+```
+
 开发相关文档：
 
 - [前端开发指南](./doc/FRONTEND_GUIDE.md)

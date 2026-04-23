@@ -25,6 +25,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 /// 已完成任务产出的关键工件信息。
+///
+/// 适用于任务执行成功后把最终写盘结果与来源证明一并交还给上层持久化或事件广播。
 #[derive(Debug, Clone)]
 pub struct CompletedTaskArtifacts {
     /// 最终写出的文件路径。
@@ -34,6 +36,9 @@ pub struct CompletedTaskArtifacts {
 }
 
 /// 下载任务执行结果。
+///
+/// 用于统一表达成功、用户取消与失败三类终态；失败时会附带已分类的
+/// [`DownloadErrorInfo`]，成功时会返回可继续持久化的工件信息。
 #[derive(Debug)]
 pub enum TaskExecutionResult {
     /// 任务执行成功。

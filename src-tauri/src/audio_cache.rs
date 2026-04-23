@@ -26,6 +26,7 @@ struct CacheFileEntry {
     modified_at: SystemTime,
 }
 
+/// 返回音频缓存目录路径。
 pub fn audio_cache_dir() -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(|| std::env::temp_dir().join("cache"))
@@ -33,12 +34,14 @@ pub fn audio_cache_dir() -> PathBuf {
         .join(AUDIO_CACHE_DIR)
 }
 
+/// 确保音频缓存目录存在，并返回其路径。
 pub fn ensure_audio_cache_dir() -> Result<PathBuf> {
     let dir = audio_cache_dir();
     fs::create_dir_all(&dir).context("Failed to create audio cache directory")?;
     Ok(dir)
 }
 
+/// 根据歌曲 CID 与源地址推导缓存文件路径。
 pub fn cached_song_path(song_cid: &str, source_url: &str) -> Result<PathBuf> {
     let extension = Path::new(source_url.split('?').next().unwrap_or(source_url))
         .extension()
@@ -49,6 +52,7 @@ pub fn cached_song_path(song_cid: &str, source_url: &str) -> Result<PathBuf> {
     Ok(ensure_audio_cache_dir()?.join(format!("{song_cid}.{extension}")))
 }
 
+/// 返回给定缓存文件对应的 `.pending` 标记文件路径。
 pub fn pending_marker_path(cache_path: &Path) -> PathBuf {
     let mut marker_name = cache_path
         .file_name()
@@ -59,10 +63,14 @@ pub fn pending_marker_path(cache_path: &Path) -> PathBuf {
     cache_path.with_file_name(marker_name)
 }
 
+/// 判断目标歌曲缓存文件是否已经完整可用。
 pub fn is_song_cached(cache_path: &Path) -> bool {
     cache_path.is_file() && !pending_marker_path(cache_path).exists()
 }
 
+/// 当缓存体积超过软上限时，在后台触发一次清理任务。
+///
+/// 该方法具备去重保护：若已有清理线程在运行，则本次调用会直接返回。
 pub fn spawn_cleanup_if_needed() {
     let Ok(dir) = ensure_audio_cache_dir() else {
         return;
@@ -90,6 +98,7 @@ pub fn spawn_cleanup_if_needed() {
     });
 }
 
+/// 清空音频缓存目录，并返回本次移除的条目数量。
 pub fn clear_audio_cache() -> Result<u64> {
     let dir = ensure_audio_cache_dir()?;
     let mut removed = 0_u64;

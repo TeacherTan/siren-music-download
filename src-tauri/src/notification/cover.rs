@@ -1,4 +1,4 @@
-//! Cover artwork download and caching for notifications.
+//! 通知封面图的下载与临时缓存逻辑。
 
 use crate::app_state::AppState;
 use std::path::PathBuf;
