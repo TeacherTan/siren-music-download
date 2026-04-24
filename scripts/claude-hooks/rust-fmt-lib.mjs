@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export function getRepoRoot() {
-  const result = runCommand("git", ["rev-parse", "--show-toplevel"]);
+  const result = runCommand('git', ['rev-parse', '--show-toplevel']);
 
   if (!isSuccessful(result)) {
     return null;
@@ -18,24 +18,53 @@ export function getChangedRustFiles(repoRoot) {
   const files = new Set([
     ...getTrackedChangedRustFiles(repoRoot),
     ...getStagedRustFiles(repoRoot),
-    ...readGitPaths(repoRoot, ["ls-files", "--others", "--exclude-standard", "--", "*.rs"]),
+    ...readGitPaths(repoRoot, [
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '--',
+      '*.rs',
+    ]),
   ]);
 
   return sortPaths(files);
 }
 
 export function getStagedRustFiles(repoRoot) {
-  return sortPaths(readGitPaths(repoRoot, ["diff", "--cached", "--name-only", "--diff-filter=ACMR", "--", "*.rs"]));
+  return sortPaths(
+    readGitPaths(repoRoot, [
+      'diff',
+      '--cached',
+      '--name-only',
+      '--diff-filter=ACMR',
+      '--',
+      '*.rs',
+    ])
+  );
 }
 
 export function getTrackedChangedRustFiles(repoRoot) {
-  return sortPaths(readGitPaths(repoRoot, ["diff", "--name-only", "--diff-filter=ACMR", "--", "*.rs"]));
+  return sortPaths(
+    readGitPaths(repoRoot, [
+      'diff',
+      '--name-only',
+      '--diff-filter=ACMR',
+      '--',
+      '*.rs',
+    ])
+  );
 }
 
 export function getWorkspaceRustFiles(repoRoot) {
   const files = new Set([
-    ...readGitPaths(repoRoot, ["ls-files", "--", "*.rs"]),
-    ...readGitPaths(repoRoot, ["ls-files", "--others", "--exclude-standard", "--", "*.rs"]),
+    ...readGitPaths(repoRoot, ['ls-files', '--', '*.rs']),
+    ...readGitPaths(repoRoot, [
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '--',
+      '*.rs',
+    ]),
   ]);
 
   return sortPaths(files);
@@ -49,22 +78,22 @@ export function diffSnapshots(before, after) {
   return sortPaths(
     [...before.entries()]
       .filter(([file, beforeHash]) => beforeHash !== after.get(file))
-      .map(([file]) => file),
+      .map(([file]) => file)
   );
 }
 
 export function runCommand(command, args, cwd, env) {
   const result = spawnSync(command, args, {
     cwd,
-    encoding: "utf8",
+    encoding: 'utf8',
     env,
   });
 
   return {
     errorMessage: result.error?.message ?? null,
     status: result.status,
-    stderr: result.stderr ?? "",
-    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? '',
+    stdout: result.stdout ?? '',
   };
 }
 
@@ -73,11 +102,13 @@ export function isSuccessful(result) {
 }
 
 export function formatCommandOutput(result) {
-  return [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n\n");
+  return [result.stdout.trim(), result.stderr.trim()]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 export function formatFileList(files) {
-  return files.map((file) => `- ${file}`).join("\n");
+  return files.map((file) => `- ${file}`).join('\n');
 }
 
 export function emitPreToolBlock(payload) {
@@ -85,12 +116,12 @@ export function emitPreToolBlock(payload) {
     systemMessage: payload.message,
     continue: false,
     stopReason: payload.stopReason,
-    decision: "block",
+    decision: 'block',
     reason: payload.reason,
     hookSpecificOutput: {
-      hookEventName: "PreToolUse",
+      hookEventName: 'PreToolUse',
       additionalContext: payload.message,
-      permissionDecision: "deny",
+      permissionDecision: 'deny',
       permissionDecisionReason: payload.permissionDecisionReason,
     },
   });
@@ -100,7 +131,7 @@ export function emitStopMessage(message) {
   emitJson({
     systemMessage: message,
     hookSpecificOutput: {
-      hookEventName: "Stop",
+      hookEventName: 'Stop',
       additionalContext: message,
     },
   });
@@ -111,7 +142,7 @@ function emitJson(payload) {
 }
 
 function readGitPaths(repoRoot, args) {
-  const result = runCommand("git", args, repoRoot);
+  const result = runCommand('git', args, repoRoot);
 
   if (!isSuccessful(result)) {
     return [];
@@ -127,10 +158,10 @@ function hashFile(repoRoot, relativePath) {
   const absolutePath = join(repoRoot, relativePath);
 
   if (!existsSync(absolutePath)) {
-    return "__missing__";
+    return '__missing__';
   }
 
-  return createHash("sha256").update(readFileSync(absolutePath)).digest("hex");
+  return createHash('sha256').update(readFileSync(absolutePath)).digest('hex');
 }
 
 function sortPaths(paths) {
