@@ -1,5 +1,6 @@
 <script lang="ts">
   import { motion } from '@humanspeak/svelte-motion';
+  import type { MotionTransition } from '@humanspeak/svelte-motion';
   import SongRow from '$lib/components/SongRow.svelte';
   import {
     getDownloadBadgeLabel,
@@ -80,14 +81,15 @@
     props.isSelectionDownloadDisabled(props.selectedSongCids)
   );
 
-  function motionTransition(duration: number, delay = 0): any {
-    const transition: any = {
+  function motionTransition(
+    duration: number,
+    delay = 0
+  ): MotionTransition {
+    return {
       duration: props.reducedMotion ? 0 : duration,
       delay: props.reducedMotion ? 0 : delay,
-      ease: 'easeOut' as const,
+      ease: 'easeOut',
     };
-
-    return transition;
   }
 
   function fadeExit(opacity = 0): MotionTarget {

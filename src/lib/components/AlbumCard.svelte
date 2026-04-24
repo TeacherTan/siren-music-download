@@ -37,15 +37,17 @@
   const showDownloadBadge = $derived.by(() =>
     shouldShowAlbumListDownloadBadge(album.download.downloadStatus)
   );
-
   const downloadBadgeLabel = $derived.by(() =>
     getDownloadBadgeLabel(album.download.downloadStatus)
   );
+
+  function handleActivate() {
+    onclick?.();
+  }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<motion.div
+<motion.button
+  type="button"
   class={`album-card${selected ? ' selected' : ''}`}
   role="button"
   tabindex="0"
@@ -80,7 +82,7 @@
       }}
   whileTap={reducedMotion ? undefined : { scale: 0.99, y: 0 }}
   transition={motionTransition}
-  {onclick}
+  onclick={handleActivate}
   onmouseenter={() => {
     isHovered = true;
   }}
@@ -118,11 +120,13 @@
       <span class="album-download-badge">{downloadBadgeLabel}</span>
     {/if}
   </div>
-</motion.div>
+</motion.button>
 
 <style>
   :global(.album-card) {
+    appearance: none;
     background: transparent;
+    border: none;
     border-radius: 12px;
     padding: 12px;
     margin-bottom: 4px;
@@ -131,6 +135,9 @@
     align-items: center;
     gap: 12px;
     outline: none;
+    font: inherit;
+    text-align: left;
+    color: inherit;
     box-shadow: inset 0 0 0 1px transparent;
   }
 

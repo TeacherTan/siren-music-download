@@ -26,7 +26,6 @@ import type {
   SearchLibraryRequest,
   SearchLibraryResponse,
 } from './types';
-import type { OutputFormat } from './types';
 
 const CACHE_KEY_ALBUM_DETAIL = 'album_detail:';
 const CACHE_KEY_SONG_DETAIL = 'song_detail:';

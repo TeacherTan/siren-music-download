@@ -1,5 +1,6 @@
 <script lang="ts">
   import { AnimatePresence, motion } from '@humanspeak/svelte-motion';
+  import type { MotionTransition } from '@humanspeak/svelte-motion';
   import PlayerDock from '$lib/components/app/PlayerDock.svelte';
   import type { PlaybackQueueEntry } from '$lib/types';
   import type { LyricLine } from '$lib/features/player/lyrics';
@@ -56,14 +57,15 @@
 
   let props: Props = $props();
 
-  function motionTransition(duration: number, delay = 0): any {
-    const transition: any = {
+  function motionTransition(
+    duration: number,
+    delay = 0
+  ): MotionTransition {
+    return {
       duration: props.reducedMotion ? 0 : duration,
       delay: props.reducedMotion ? 0 : delay,
-      ease: 'easeOut' as const,
+      ease: 'easeOut',
     };
-
-    return transition;
   }
 
   function fadeExit(opacity = 0): MotionTarget {

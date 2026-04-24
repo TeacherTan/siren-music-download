@@ -43,12 +43,9 @@
     DownloadJobSnapshot,
     DownloadManagerSnapshot,
     DownloadTaskProgressEvent,
-    CreateDownloadJobRequest,
-    DownloadTaskSnapshot,
     LocalInventorySnapshot,
     AppErrorEvent,
     LogLevel,
-    LibrarySearchScope,
     SearchLibraryResultItem,
   } from '$lib/types';
   import { applyThemePalette, DEFAULT_THEME_PALETTE } from '$lib/theme';
@@ -76,8 +73,6 @@
   // Minimum display time (ms) to prevent animation flash on fast loads
   const MIN_DISPLAY_MS = 260;
   const DETAIL_SKELETON_DELAY_MS = 140;
-  const OVERLAY_DURATION = 0.16;
-  const SHEET_DURATION = 0.22;
 
   const delay = (ms: number): Promise<void> =>
     new Promise((resolve) => {
@@ -208,7 +203,6 @@
   const lyricsLoading = $derived(playerController.lyricsLoading);
   const lyricsError = $derived(playerController.lyricsError);
   const lyricsLines = $derived(playerController.lyricsLines);
-  const downloadingSongCid = $derived(downloadController.downloadingSongCid);
   const downloadingAlbumCid = $derived(downloadController.downloadingAlbumCid);
   const activeDownloadCount = $derived(downloadController.activeDownloadCount);
   const filteredDownloadJobs = $derived(downloadController.filteredJobs);
@@ -944,8 +938,7 @@
 
     <!-- 歌曲列表内容区 -->
     <AlbumWorkspace {currentSong} {loadingDetail} {selectedAlbum}>
-      {#snippet children()}
-        <AlbumWorkspaceContent
+      <AlbumWorkspaceContent
           {loadingDetail}
           {showDetailSkeleton}
           {albumRequestSeq}
@@ -992,7 +985,6 @@
           hasCurrentSelectionJob={(songCids: string[]) =>
             !!downloadController.getCurrentSelectionJob(songCids)}
         />
-      {/snippet}
     </AlbumWorkspace>
 
     <PlayerFlyoutStack

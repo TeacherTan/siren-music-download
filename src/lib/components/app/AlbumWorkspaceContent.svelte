@@ -1,5 +1,6 @@
 <script lang="ts">
   import { AnimatePresence, motion } from '@humanspeak/svelte-motion';
+  import type { MotionTransition } from '@humanspeak/svelte-motion';
   import { OverlayScrollbarsComponent } from 'overlayscrollbars-svelte';
   import type { EventListeners, PartialOptions } from 'overlayscrollbars';
   import type { AlbumDetail, SongEntry } from '$lib/types';
@@ -94,14 +95,15 @@
     hasCurrentSelectionJob,
   }: Props = $props();
 
-  function motionTransition(duration: number, delay = 0): any {
-    const transition: any = {
+  function motionTransition(
+    duration: number,
+    delay = 0
+  ): MotionTransition {
+    return {
       duration: reducedMotion ? 0 : duration,
       delay: reducedMotion ? 0 : delay,
-      ease: 'easeOut' as const,
+      ease: 'easeOut',
     };
-
-    return transition;
   }
 
   function fadeEnter(opacity = 0): MotionTarget {

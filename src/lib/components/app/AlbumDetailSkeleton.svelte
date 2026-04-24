@@ -1,5 +1,6 @@
 <script lang="ts">
   import { motion } from '@humanspeak/svelte-motion';
+  import type { MotionTransition } from '@humanspeak/svelte-motion';
   import MotionPulseBlock from '$lib/components/MotionPulseBlock.svelte';
   import MotionSpinner from '$lib/components/MotionSpinner.svelte';
 
@@ -17,14 +18,15 @@
 
   let props: Props = $props();
 
-  function motionTransition(duration: number, delay = 0): any {
-    const transition: any = {
+  function motionTransition(
+    duration: number,
+    delay = 0
+  ): MotionTransition {
+    return {
       duration: props.reducedMotion ? 0 : duration,
       delay: props.reducedMotion ? 0 : delay,
-      ease: 'easeOut' as const,
+      ease: 'easeOut',
     };
-
-    return transition;
   }
 
   function fadeEnter(opacity = 0): MotionTarget {

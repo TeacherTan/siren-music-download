@@ -15,10 +15,10 @@ const sharedGlobals = {
 const tsRules = {
   ...tseslint.configs.recommended.rules,
   '@typescript-eslint/no-unused-vars': [
-    'warn',
+    'error',
     { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
   ],
-  '@typescript-eslint/no-explicit-any': 'warn',
+  '@typescript-eslint/no-explicit-any': 'error',
   'no-unused-vars': 'off',
   'no-undef': 'off',
 };
@@ -45,7 +45,7 @@ export default [
     rules: {
       ...js.configs.recommended.rules,
       'no-unused-vars': [
-        'warn',
+        'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
     },
@@ -85,7 +85,7 @@ export default [
       '@typescript-eslint/no-unused-expressions': 'off',
       'no-useless-assignment': 'warn',
       'no-unsafe-finally': 'warn',
-      'svelte/no-unused-svelte-ignore': 'warn',
+      'svelte/no-unused-svelte-ignore': 'error',
       'svelte/no-useless-children-snippet': 'warn',
     },
   },

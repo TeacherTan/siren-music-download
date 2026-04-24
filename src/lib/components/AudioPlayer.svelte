@@ -186,7 +186,7 @@
         const dataUrl = await getImageDataUrl(coverUrl);
         if (requestSeq !== coverRequestSeq) return;
         resolvedCoverUrl = dataUrl;
-      } catch (error) {
+      } catch {
         if (requestSeq !== coverRequestSeq) return;
         resolvedCoverUrl = null;
       }
