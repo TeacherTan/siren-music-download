@@ -78,7 +78,7 @@ if (targetPrettierFiles.length > 0) {
 
     emitPreToolBlock({
       message: `Blocked git commit: \`prettier --write\` failed. Fix the formatter error, then retry the commit.${detailSuffix}`,
-      stopReason: 'Blocked git commit because \`prettier --write\` failed.',
+      stopReason: 'Blocked git commit because prettier --write failed.',
       reason: 'prettier --write failed',
       permissionDecisionReason: 'Run prettier successfully before committing.',
     });
@@ -100,7 +100,7 @@ if (targetRustFiles.length > 0) {
 
     emitPreToolBlock({
       message: `Blocked git commit: \`rustfmt --edition 2021 ...\` failed. Fix the formatter error, then retry the commit.${detailSuffix}`,
-      stopReason: 'Blocked git commit because \`rustfmt\` failed.',
+      stopReason: 'Blocked git commit because rustfmt failed.',
       reason: 'rustfmt failed',
       permissionDecisionReason: 'Run rustfmt successfully before committing.',
     });
