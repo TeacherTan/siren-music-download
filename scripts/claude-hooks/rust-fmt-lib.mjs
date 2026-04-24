@@ -15,22 +15,37 @@ export function getRepoRoot() {
 }
 
 export function getChangedRustFiles(repoRoot) {
+  return getChangedFiles(repoRoot, ['*.rs']);
+}
+
+export function getStagedRustFiles(repoRoot) {
+  return getStagedFiles(repoRoot, ['*.rs']);
+}
+
+export function getTrackedChangedRustFiles(repoRoot) {
+  return getTrackedChangedFiles(repoRoot, ['*.rs']);
+}
+
+export function getWorkspaceRustFiles(repoRoot) {
   const files = new Set([
-    ...getTrackedChangedRustFiles(repoRoot),
-    ...getStagedRustFiles(repoRoot),
-    ...readGitPaths(repoRoot, [
-      'ls-files',
-      '--others',
-      '--exclude-standard',
-      '--',
-      '*.rs',
-    ]),
+    ...readGitPaths(repoRoot, ['ls-files', '--', '*.rs']),
+    ...getUntrackedFiles(repoRoot, ['*.rs']),
   ]);
 
   return sortPaths(files);
 }
 
-export function getStagedRustFiles(repoRoot) {
+export function getChangedFiles(repoRoot, patterns) {
+  const files = new Set([
+    ...getTrackedChangedFiles(repoRoot, patterns),
+    ...getStagedFiles(repoRoot, patterns),
+    ...getUntrackedFiles(repoRoot, patterns),
+  ]);
+
+  return sortPaths(files);
+}
+
+export function getStagedFiles(repoRoot, patterns) {
   return sortPaths(
     readGitPaths(repoRoot, [
       'diff',
@@ -38,36 +53,21 @@ export function getStagedRustFiles(repoRoot) {
       '--name-only',
       '--diff-filter=ACMR',
       '--',
-      '*.rs',
+      ...patterns,
     ])
   );
 }
 
-export function getTrackedChangedRustFiles(repoRoot) {
+export function getTrackedChangedFiles(repoRoot, patterns) {
   return sortPaths(
     readGitPaths(repoRoot, [
       'diff',
       '--name-only',
       '--diff-filter=ACMR',
       '--',
-      '*.rs',
+      ...patterns,
     ])
   );
-}
-
-export function getWorkspaceRustFiles(repoRoot) {
-  const files = new Set([
-    ...readGitPaths(repoRoot, ['ls-files', '--', '*.rs']),
-    ...readGitPaths(repoRoot, [
-      'ls-files',
-      '--others',
-      '--exclude-standard',
-      '--',
-      '*.rs',
-    ]),
-  ]);
-
-  return sortPaths(files);
 }
 
 export function snapshotFileHashes(repoRoot, files) {
@@ -152,6 +152,18 @@ function readGitPaths(repoRoot, args) {
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function getUntrackedFiles(repoRoot, patterns) {
+  return sortPaths(
+    readGitPaths(repoRoot, [
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '--',
+      ...patterns,
+    ])
+  );
 }
 
 function hashFile(repoRoot, relativePath) {
