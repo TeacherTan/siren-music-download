@@ -1,3 +1,8 @@
+//! 本地库存扫描、证据建模与下载徽标聚合。
+//!
+//! 该模块定义本地库存扫描状态、音频文件证据、校验模式与专辑/曲目下载徽标相关模型，
+//! 供库存扫描服务、下载结果增强与前端展示层复用。
+
 use crate::audio::sanitize_filename;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

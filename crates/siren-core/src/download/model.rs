@@ -1,3 +1,8 @@
+//! 下载任务、批次与事件快照模型。
+//!
+//! 该模块定义下载选项、任务状态、批次状态、错误信息与前后端共享的快照结构，是
+//! 下载管理器、桥接层与前端任务面板之间的稳定数据契约。
+
 use crate::audio::OutputFormat;
 use serde::{Deserialize, Serialize};
 use std::path::Path;

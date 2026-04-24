@@ -1,3 +1,8 @@
+//! 播放输出后端抽象与默认实现选择入口。
+//!
+//! 该模块定义播放器与具体音频输出实现之间的抽象边界，并负责创建默认播放后端；
+//! 当前默认后端为基于 CPAL 的桌面音频输出实现。
+
 use crate::player::stream::{AudioFormat, PlaybackErrorHandler, SampleBuffer};
 use anyhow::Result;
 use std::sync::atomic::AtomicBool;

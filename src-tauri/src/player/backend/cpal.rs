@@ -1,3 +1,8 @@
+//! 基于 CPAL 的默认音频播放后端实现。
+//!
+//! 该模块负责选择可用输出设备与格式、创建音频输出流，并把播放器解码后的样本缓冲
+//! 推送到系统音频设备，供桌面端实际发声使用。
+
 use crate::player::backend::PlaybackBackend;
 use crate::player::stream::{AudioFormat, PlaybackErrorHandler, SampleBuffer};
 use anyhow::{Context, Result};

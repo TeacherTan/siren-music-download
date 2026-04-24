@@ -1,3 +1,8 @@
+//! 媒体库与详情读取相关的 Tauri command。
+//!
+//! 当前暴露的接口覆盖专辑列表、专辑详情、单曲详情、歌词文本、远程封面主题提取，
+//! 以及远程封面 data URL 转换与默认下载目录建议值读取，主要服务于前端的浏览、播放前预取与展示增强场景。
+
 use crate::app_state::AppState;
 use crate::theme;
 use base64::Engine;

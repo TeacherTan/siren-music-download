@@ -3,7 +3,6 @@
   import { listen } from "@tauri-apps/api/event";
   import { AnimatePresence, motion } from "@humanspeak/svelte-motion";
   import { OverlayScrollbarsComponent } from "overlayscrollbars-svelte";
-  import type { OverlayScrollbarsComponentRef } from "overlayscrollbars-svelte";
   import type {
     EventListeners,
     OverlayScrollbars,
@@ -56,16 +55,10 @@
     LocalInventorySnapshot,
     AppErrorEvent,
     LogLevel,
-    DownloadHistoryScopeFilter,
-    DownloadHistoryStatusFilter,
-    DownloadHistoryKindFilter,
     LibrarySearchScope,
-    SearchLibraryResponse,
     SearchLibraryResultItem,
   } from "$lib/types";
   import { applyThemePalette, DEFAULT_THEME_PALETTE } from "$lib/theme";
-  import { getDownloadBadgeLabel, shouldShowDownloadBadge } from "$lib/downloadBadge";
-  import { motionStyles } from "$lib/actions/motionStyles";
   import { envStore } from "$lib/features/env/store.svelte";
   import { shellStore } from "$lib/features/shell/store.svelte";
   import { createLibraryController } from "$lib/features/library/controller.svelte";
@@ -74,16 +67,16 @@
   import { clamp, preloadImage } from "$lib/features/library/helpers";
   import { buildAlbumPlaybackEntries, getSelectedAlbumCoverUrl } from "$lib/features/library/selectors";
   import { toast } from "svelte-sonner";
-  import AlbumCard from "$lib/components/AlbumCard.svelte";
-  import SongRow from "$lib/components/SongRow.svelte";
-  import AudioPlayer from "$lib/components/AudioPlayer.svelte";
   import MotionSpinner from "$lib/components/MotionSpinner.svelte";
   import MotionPulseBlock from "$lib/components/MotionPulseBlock.svelte";
   import TopToolbar from "$lib/components/app/TopToolbar.svelte";
   import StatusToastHost from "$lib/components/app/StatusToastHost.svelte";
   import AlbumSidebar from "$lib/components/app/AlbumSidebar.svelte";
   import AlbumWorkspace from "$lib/components/app/AlbumWorkspace.svelte";
-  import PlayerDock from "$lib/components/app/PlayerDock.svelte";
+  import AlbumStage from "$lib/components/app/AlbumStage.svelte";
+  import AlbumDetailSkeleton from "$lib/components/app/AlbumDetailSkeleton.svelte";
+  import AlbumDetailPanel from "$lib/components/app/AlbumDetailPanel.svelte";
+  import PlayerFlyoutStack from "$lib/components/app/PlayerFlyoutStack.svelte";
 
   // Minimum display time (ms) to prevent animation flash on fast loads
   const MIN_DISPLAY_MS = 260;
@@ -96,7 +89,6 @@
   const CONTENT_MASK_DURATION = 0.14;
   const OVERLAY_DURATION = 0.16;
   const SHEET_DURATION = 0.22;
-  const PLAYER_DOCK_DURATION = 0.22;
   const DEFAULT_ALBUM_STAGE_ASPECT_RATIO = 16 / 9;
   const ALBUM_STAGE_BASE_VIEWPORT_RATIO = 1 / 3;
   const ALBUM_STAGE_COLLAPSE_SCROLL_RANGE = 260;
@@ -105,7 +97,6 @@
   const delay = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
 
-  type SongDownloadState = "idle" | "creating" | "queued" | "running";
   type SettingsSheetComponent = typeof import("$lib/components/app/SettingsSheet.svelte").default;
   type DownloadTasksSheetComponent = typeof import("$lib/components/app/DownloadTasksSheet.svelte").default;
 
@@ -209,9 +200,6 @@
   const filteredDownloadJobs = $derived(downloadController.filteredJobs);
   const hasDownloadHistory = $derived(downloadController.hasDownloadHistory);
   let contentEl = $state<HTMLElement | null>(null);
-  let contentScrollbar = $state<OverlayScrollbarsComponentRef<"main"> | null>(
-    null,
-  );
   let albumStageEl = $state<HTMLElement | null>(null);
   let selectedAlbumArtworkUrl = $state<string | null>(null);
   const isMacOS = $derived(envStore.isMacOS);
@@ -241,13 +229,6 @@
     }
 
     return activeIndex;
-  });
-
-  const selectedSongCount = $derived.by(() => selectedSongCids.length);
-  const selectedSongsLabel = $derived.by(() => {
-    if (selectedSongCount === 0) return "未选择歌曲";
-    if (selectedSongCount === 1) return "已选择 1 首";
-    return `已选择 ${selectedSongCount} 首`;
   });
 
   function setContentViewport(instance: OverlayScrollbars) {
@@ -495,30 +476,6 @@
     return { opacity };
   }
 
-  function axisEnter(axis: "x" | "y", offset: number): MotionTarget {
-    return prefersReducedMotion
-      ? { opacity: 1 }
-      : { opacity: 0, [axis]: offset };
-  }
-
-  function axisAnimate(axis: "x" | "y"): MotionTarget {
-    return { opacity: 1, [axis]: 0 };
-  }
-
-  function axisExit(axis: "x" | "y", offset: number): MotionTarget {
-    return prefersReducedMotion
-      ? { opacity: 0 }
-      : { opacity: 0, [axis]: offset };
-  }
-
-  const interactiveTransition = $derived.by(
-    () =>
-      ({
-        duration: prefersReducedMotion ? 0 : 0.16,
-        ease: "easeOut",
-      }) as const,
-  );
-
   const albumStageMotionHeight = $derived.by(() =>
     albumStageHeight > 0
       ? albumStageHeight
@@ -542,32 +499,6 @@
   const albumStageSolidifyOpacity = $derived.by(
     () => albumStageSolidifyProgress,
   );
-
-  function modeButtonAnimate(active: boolean): MotionTarget {
-    return active
-      ? {
-          backgroundColor: "var(--accent)",
-          color: "#ffffff",
-          boxShadow: "0 10px 22px rgba(var(--accent-rgb), 0.22)",
-        }
-      : {
-          backgroundColor: "rgba(15, 23, 42, 0)",
-          color: "rgba(31, 41, 55, 0.72)",
-          boxShadow: "0 0 0 rgba(var(--accent-rgb), 0)",
-        };
-  }
-
-  function modeButtonHover(active: boolean): MotionTarget | undefined {
-    if (active) {
-      return prefersReducedMotion ? undefined : { y: -1 };
-    }
-
-    return {
-      backgroundColor: "rgba(15, 23, 42, 0.06)",
-      color: "var(--text-primary)",
-      ...(prefersReducedMotion ? {} : { y: -1 }),
-    };
-  }
 
   function toolbarButtonAnimate(
     active = false,
@@ -594,87 +525,6 @@
       boxShadow: "0 10px 22px rgba(var(--accent-rgb), 0.14)",
       ...(prefersReducedMotion ? {} : { y: -1 }),
     };
-  }
-
-  function appButtonAnimate(primary = false, disabled = false): MotionTarget {
-    return primary
-      ? {
-          backgroundColor: disabled ? "var(--bg-tertiary)" : "var(--accent)",
-          color: disabled ? "var(--text-tertiary)" : "#ffffff",
-          boxShadow: disabled
-            ? "0 0 0 rgba(var(--accent-rgb), 0)"
-            : "0 10px 24px rgba(var(--accent-rgb), 0.16)",
-          opacity: disabled ? 0.72 : 1,
-        }
-      : {
-          backgroundColor: "var(--bg-tertiary)",
-          color: "var(--text-primary)",
-          boxShadow: "0 0 0 rgba(var(--accent-rgb), 0)",
-          opacity: disabled ? 0.42 : 1,
-        };
-  }
-
-  function appButtonHover(
-    primary = false,
-    disabled = false,
-  ): MotionTarget | undefined {
-    if (disabled) return undefined;
-
-    return primary
-      ? {
-          backgroundColor: "var(--accent-hover)",
-          boxShadow: "0 10px 24px rgba(var(--accent-rgb), 0.2)",
-          ...(prefersReducedMotion ? {} : { y: -1 }),
-        }
-      : {
-          backgroundColor: "var(--hover-bg-elevated)",
-          boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
-          ...(prefersReducedMotion ? {} : { y: -1 }),
-        };
-  }
-
-  function settingsCloseAnimate(): MotionTarget {
-    return {
-      backgroundColor: "var(--bg-tertiary)",
-      color: "var(--text-secondary)",
-    };
-  }
-
-  function settingsCloseHover(): MotionTarget {
-    return {
-      backgroundColor: "var(--hover-bg-elevated)",
-      color: "var(--text-primary)",
-      ...(prefersReducedMotion ? {} : { y: -1 }),
-    };
-  }
-
-  function fieldAnimate(): MotionTarget {
-    return {
-      backgroundColor: "var(--bg-tertiary)",
-      borderColor: "var(--border)",
-      color: "var(--text-primary)",
-      boxShadow: "0 0 0 0 rgba(var(--accent-rgb), 0)",
-    };
-  }
-
-  function fieldHover(): MotionTarget {
-    return {
-      borderColor: "var(--text-tertiary)",
-    };
-  }
-
-  function fieldFocus(): MotionTarget {
-    return {
-      borderColor: "var(--accent)",
-      backgroundColor: "var(--accent-light)",
-      boxShadow: "0 0 0 3px rgba(var(--accent-rgb), 0.12)",
-    };
-  }
-
-  function fieldMotion(hovered: boolean, focused: boolean): MotionTarget {
-    if (focused) return fieldFocus();
-    if (hovered) return fieldHover();
-    return fieldAnimate();
   }
 
   $effect(() => {
@@ -1392,7 +1242,6 @@
       element="div"
       class="h-full"
       data-overlayscrollbars-initialize
-      bind:this={contentScrollbar}
       options={overlayScrollbarOptions}
       events={contentScrollbarEvents}
       defer
@@ -1409,74 +1258,15 @@
             exit={fadeExit()}
             transition={motionTransition(PANEL_DURATION)}
           >
-            <div
-              class="album-stage"
-              bind:this={albumStageEl}
-              style={albumStageStyle}
-            >
-              <div class="album-stage-frame">
-                <div
-                  class="album-stage-media album-stage-media-loading"
-                  style:height={albumStageMediaHeight}
-                >
-                  <div class="album-stage-media-content">
-                    <MotionPulseBlock
-                      className="album-stage-skeleton loading-cover"
-                      reducedMotion={prefersReducedMotion}
-                    />
-                  </div>
-                  <div
-                    class="album-stage-media-scrim"
-                    aria-hidden="true"
-                    style:opacity={albumStageScrimOpacity}
-                  ></div>
-                  <div
-                    class="album-stage-media-border"
-                    aria-hidden="true"
-                  ></div>
-                  <div class="album-stage-divider" aria-hidden="true"></div>
-                </div>
-              </div>
-            </div>
-            <motion.div
-              class="album-detail-card"
-              initial={fadeEnter()}
-              animate={{ opacity: 1 }}
-              exit={fadeExit()}
-              transition={motionTransition(PANEL_DURATION)}
-            >
-              <div class="album-hero">
-                <motion.div
-                  class="album-hero-info"
-                  initial={fadeEnter()}
-                  animate={{ opacity: 1 }}
-                  exit={fadeExit()}
-                  transition={motionTransition(HERO_DURATION, HERO_DELAY)}
-                >
-                  <MotionPulseBlock
-                    className="album-hero-title loading-text"
-                    reducedMotion={prefersReducedMotion}
-                  />
-                  <MotionPulseBlock
-                    className="album-hero-sub loading-text-sub"
-                    reducedMotion={prefersReducedMotion}
-                    delay={0.14}
-                  />
-                </motion.div>
-              </div>
-              <motion.div
-                class="loading album-loading"
-                initial={fadeEnter()}
-                animate={{ opacity: 1 }}
-                exit={fadeExit()}
-                transition={motionTransition(LIST_DURATION, LIST_DELAY)}
-              >
-                <span>正在加载歌曲...</span><MotionSpinner
-                  className="inline-loading-spinner"
-                  reducedMotion={prefersReducedMotion}
-                />
-              </motion.div>
-            </motion.div>
+            <AlbumStage
+              loading={true}
+              reducedMotion={prefersReducedMotion}
+              stageStyle={albumStageStyle}
+              mediaHeight={albumStageMediaHeight}
+              scrimOpacity={albumStageScrimOpacity}
+              bind:element={albumStageEl}
+            />
+            <AlbumDetailSkeleton reducedMotion={prefersReducedMotion} />
           </motion.section>
         {:else if selectedAlbum}
           <motion.section
@@ -1487,256 +1277,51 @@
             exit={fadeExit()}
             transition={motionTransition(PANEL_DURATION)}
           >
-            <div
-              class="album-stage"
-              bind:this={albumStageEl}
-              style={albumStageStyle}
-            >
-              <div class="album-stage-frame">
-                <div
-                  class="album-stage-media"
-                  style:height={albumStageMediaHeight}
-                >
-                  <div class="album-stage-media-content">
-                    <img
-                      class="album-stage-image"
-                      src={selectedAlbumArtworkUrl ?? undefined}
-                      alt="{selectedAlbum.name} banner"
-                      loading="eager"
-                      style:opacity={albumStageImageOpacity}
-                      style:transform={albumStageImageTransform}
-                    />
-                    <div
-                      class="album-stage-solidify"
-                      aria-hidden="true"
-                      style:opacity={albumStageSolidifyOpacity}
-                    ></div>
-                  </div>
-                  <div
-                    class="album-stage-media-scrim"
-                    aria-hidden="true"
-                    style:opacity={albumStageScrimOpacity}
-                  ></div>
-                  <div
-                    class="album-stage-media-border"
-                    aria-hidden="true"
-                  ></div>
-                  <div class="album-stage-divider" aria-hidden="true"></div>
-                </div>
-              </div>
-            </div>
-            <motion.div
-              class="album-detail-card"
-              initial={fadeEnter()}
-              animate={{ opacity: 1 }}
-              exit={fadeExit()}
-              transition={motionTransition(PANEL_DURATION)}
-            >
-              <div class="album-hero">
-                <motion.div
-                  class="album-hero-info"
-                  initial={axisEnter("y", 14)}
-                  animate={axisAnimate("y")}
-                  exit={axisExit("y", 8)}
-                  transition={motionTransition(HERO_DURATION, HERO_DELAY)}
-                >
-                  {#if selectedAlbum.belong}
-                    <span class="album-belong-tag"
-                      >{selectedAlbum.belong.toUpperCase()}</span
-                    >
-                  {/if}
-                  <h1 class="album-hero-title">{selectedAlbum.name}</h1>
-                  {#if selectedAlbum.artists && selectedAlbum.artists.length > 0}
-                    <p class="album-hero-artists">
-                      {selectedAlbum.artists.join(", ")}
-                    </p>
-                  {/if}
-                  {#if selectedAlbum.intro}
-                    <p class="album-hero-intro">{selectedAlbum.intro}</p>
-                  {/if}
-                  <div class="album-hero-meta">
-                    <span class="album-song-count"
-                      >{selectedAlbum.songs.length} 首歌曲</span
-                    >
-                    {#if shouldShowDownloadBadge(selectedAlbum.download.downloadStatus)}
-                      <span class="album-download-status-badge">
-                        {getDownloadBadgeLabel(selectedAlbum.download.downloadStatus)}
-                      </span>
-                    {/if}
-                  </div>
-                  <div class="controls album-hero-actions">
-                    <motion.button
-                      class="btn btn-primary"
-                      onclick={() => downloadController.handleAlbumDownload(selectedAlbum.cid)}
-                      disabled={downloadingAlbumCid === selectedAlbum.cid ||
-                        !!downloadController.findAlbumDownloadJob(selectedAlbum.cid)}
-                      animate={appButtonAnimate(
-                        true,
-                        downloadingAlbumCid === selectedAlbum.cid ||
-                          !!downloadController.findAlbumDownloadJob(selectedAlbum.cid),
-                      )}
-                      whileHover={appButtonHover(
-                        true,
-                        downloadingAlbumCid === selectedAlbum.cid ||
-                          !!downloadController.findAlbumDownloadJob(selectedAlbum.cid),
-                      )}
-                      whileTap={!prefersReducedMotion &&
-                      !(
-                        downloadingAlbumCid === selectedAlbum.cid ||
-                        !!downloadController.findAlbumDownloadJob(selectedAlbum.cid)
-                      )
-                        ? { y: 0, scale: 0.98, opacity: 0.94 }
-                        : undefined}
-                      transition={interactiveTransition}
-                    >
-                      {#if downloadingAlbumCid === selectedAlbum.cid}
-                        正在创建任务...
-                      {:else if downloadController.findAlbumDownloadJob(selectedAlbum.cid)}
-                        已在队列中
-                      {:else}
-                        下载整张专辑
-                      {/if}
-                    </motion.button>
-                    <motion.button
-                      class="btn"
-                      onclick={toggleSelectionMode}
-                      animate={appButtonAnimate(false, false)}
-                      whileHover={appButtonHover(false, false)}
-                      whileTap={prefersReducedMotion
-                        ? undefined
-                        : { y: 0, scale: 0.98, opacity: 0.94 }}
-                      transition={interactiveTransition}
-                    >
-                      {selectionModeEnabled ? "取消多选" : "多选下载"}
-                    </motion.button>
-                    {#if selectionModeEnabled}
-                      <motion.button
-                        class="btn"
-                        onclick={selectAllSongs}
-                        disabled={!selectedAlbum ||
-                          selectedSongCount === selectedAlbum.songs.length}
-                        animate={appButtonAnimate(
-                          false,
-                          !selectedAlbum ||
-                            selectedSongCount === selectedAlbum.songs.length,
-                        )}
-                        whileHover={appButtonHover(
-                          false,
-                          !selectedAlbum ||
-                            selectedSongCount === selectedAlbum.songs.length,
-                        )}
-                        whileTap={!prefersReducedMotion &&
-                        selectedAlbum &&
-                        selectedSongCount !== selectedAlbum.songs.length
-                          ? { y: 0, scale: 0.98, opacity: 0.94 }
-                          : undefined}
-                        transition={interactiveTransition}
-                      >
-                        全选
-                      </motion.button>
-                      <motion.button
-                        class="btn"
-                        onclick={deselectAllSongs}
-                        disabled={selectedSongCount === 0}
-                        animate={appButtonAnimate(false, selectedSongCount === 0)}
-                        whileHover={appButtonHover(false, selectedSongCount === 0)}
-                        whileTap={!prefersReducedMotion && selectedSongCount > 0
-                          ? { y: 0, scale: 0.98, opacity: 0.94 }
-                          : undefined}
-                        transition={interactiveTransition}
-                      >
-                        清空
-                      </motion.button>
-                      <motion.button
-                        class="btn"
-                        onclick={invertSongSelection}
-                        disabled={!selectedAlbum ||
-                          selectedAlbum.songs.length === 0}
-                        animate={appButtonAnimate(
-                          false,
-                          !selectedAlbum || selectedAlbum.songs.length === 0,
-                        )}
-                        whileHover={appButtonHover(
-                          false,
-                          !selectedAlbum || selectedAlbum.songs.length === 0,
-                        )}
-                        whileTap={!prefersReducedMotion &&
-                        selectedAlbum &&
-                        selectedAlbum.songs.length > 0
-                          ? { y: 0, scale: 0.98, opacity: 0.94 }
-                          : undefined}
-                        transition={interactiveTransition}
-                      >
-                        反选
-                      </motion.button>
-                      <motion.button
-                        class="btn btn-primary"
-                        onclick={() =>
-                          downloadController.handleSelectionDownload(selectedSongCids, {
-                            afterCreated: () => {
-                              clearSongSelection();
-                              selectionModeEnabled = false;
-                            },
-                          })}
-                        disabled={downloadController.isSelectionDownloadActionDisabled(selectedSongCids)}
-                        animate={appButtonAnimate(
-                          true,
-                          downloadController.isSelectionDownloadActionDisabled(selectedSongCids),
-                        )}
-                        whileHover={appButtonHover(
-                          true,
-                          downloadController.isSelectionDownloadActionDisabled(selectedSongCids),
-                        )}
-                        whileTap={!prefersReducedMotion &&
-                        !downloadController.isSelectionDownloadActionDisabled(selectedSongCids)
-                          ? { y: 0, scale: 0.98, opacity: 0.94 }
-                          : undefined}
-                        transition={interactiveTransition}
-                      >
-                        {#if downloadController.isCurrentSelectionCreating(selectedSongCids)}
-                          正在创建批量任务...
-                        {:else if downloadController.getCurrentSelectionJob(selectedSongCids)}
-                          已在队列中
-                        {:else}
-                          下载所选歌曲
-                        {/if}
-                      </motion.button>
-                      <span class="album-selection-summary"
-                        >{selectedSongsLabel}</span
-                      >
-                    {/if}
-                  </div>
-                </motion.div>
-              </div>
-              <motion.div
-                class="song-list"
-                initial={axisEnter("y", 10)}
-                animate={axisAnimate("y")}
-                exit={fadeExit()}
-                transition={motionTransition(LIST_DURATION, LIST_DELAY)}
-              >
-                {#each selectedAlbum.songs as song, i (song.cid)}
-                  <SongRow
-                    {song}
-                    index={i}
-                    isPlaying={currentSong?.cid === song.cid &&
-                      (isPlaying || isPaused)}
-                    downloadState={downloadController.getSongDownloadState(song.cid)}
-                    downloadDisabled={downloadController.isSongDownloadInteractionBlocked(
-                      song.cid,
-                    )}
-                    selectionMode={selectionModeEnabled}
-                    isSelected={isSongSelected(song.cid)}
-                    selectionDisabled={downloadController.isCurrentSelectionCreating(selectedSongCids)}
-                    reducedMotion={prefersReducedMotion}
-                    onclick={() => handlePlay(song)}
-                    onDownload={() => downloadController.handleSongDownload(song.cid)}
-                    onToggleSelection={() => toggleSongSelection(song.cid)}
-                  />
-                {/each}
-              </motion.div>
-            </motion.div>
-          </motion.section>
+            <AlbumStage
+              albumName={selectedAlbum.name}
+              artworkUrl={selectedAlbumArtworkUrl}
+              reducedMotion={prefersReducedMotion}
+              stageStyle={albumStageStyle}
+              mediaHeight={albumStageMediaHeight}
+              scrimOpacity={albumStageScrimOpacity}
+              imageOpacity={albumStageImageOpacity}
+              imageTransform={albumStageImageTransform}
+              solidifyOpacity={albumStageSolidifyOpacity}
+              bind:element={albumStageEl}
+            />
+            <AlbumDetailPanel
+              album={selectedAlbum}
+              currentSongCid={currentSong?.cid ?? null}
+              isPlaybackActive={isPlaying || isPaused}
+              {downloadingAlbumCid}
+              {selectionModeEnabled}
+              {selectedSongCids}
+              reducedMotion={prefersReducedMotion}
+              onToggleSelectionMode={toggleSelectionMode}
+              onSelectAllSongs={selectAllSongs}
+              onDeselectAllSongs={deselectAllSongs}
+              onInvertSongSelection={invertSongSelection}
+              onDownloadAlbum={downloadController.handleAlbumDownload}
+              onDownloadSelection={(songCids) =>
+                downloadController.handleSelectionDownload(songCids, {
+                  afterCreated: () => {
+                    clearSongSelection();
+                    selectionModeEnabled = false;
+                  },
+                })}
+              onPlaySong={handlePlay}
+              onDownloadSong={downloadController.handleSongDownload}
+              onToggleSongSelection={toggleSongSelection}
+              {isSongSelected}
+              getSongDownloadState={downloadController.getSongDownloadState}
+              isSongDownloadInteractionBlocked={downloadController.isSongDownloadInteractionBlocked}
+              hasAlbumDownloadJob={(albumCid) =>
+                !!downloadController.findAlbumDownloadJob(albumCid)}
+              isSelectionDownloadDisabled={downloadController.isSelectionDownloadActionDisabled}
+              isCurrentSelectionCreating={downloadController.isCurrentSelectionCreating}
+              hasCurrentSelectionJob={(songCids) =>
+                !!downloadController.getCurrentSelectionJob(songCids)}
+            />          </motion.section>
         {/if}
       </AnimatePresence>
 
@@ -1767,157 +1352,48 @@
       {/snippet}
     </AlbumWorkspace>
 
-    <AnimatePresence>
-      {#if currentSong}
-        <motion.div
-          key="player-dock"
-          initial={axisEnter("y", 18)}
-          animate={axisAnimate("y")}
-          exit={fadeExit()}
-          transition={motionTransition(PLAYER_DOCK_DURATION)}
-        >
-          <div
-            class="player-dock-stack"
-            data-panel={lyricsOpen
-              ? "lyrics"
-              : playlistOpen
-                ? "playlist"
-                : "none"}
-          >
-            <AnimatePresence initial={false}>
-              {#if lyricsOpen}
-                <motion.section
-                  key="player-lyrics"
-                  class="player-flyout"
-                  data-panel="lyrics"
-                  initial={axisEnter("y", 12)}
-                  animate={axisAnimate("y")}
-                  exit={axisExit("y", 8)}
-                  transition={motionTransition(0.18)}
-                >
-                  <div class="player-flyout-header">
-                    <div>
-                      <p class="player-flyout-eyebrow">歌词</p>
-                      <h3 class="player-flyout-title">{currentSong.name}</h3>
-                    </div>
-                    <span class="player-flyout-count"
-                      >{lyricsLines.length > 0
-                        ? `${lyricsLines.length} 行`
-                        : "歌词"}</span
-                    >
-                  </div>
-
-                  {#if lyricsLoading}
-                    <div class="player-flyout-empty">正在加载歌词…</div>
-                  {:else if lyricsError}
-                    <div class="player-flyout-empty">{lyricsError}</div>
-                  {:else if lyricsLines.length > 0}
-                    <div class="player-lyrics-list">
-                      {#each lyricsLines as line, index (line.id)}
-                        <p
-                          class={`player-lyric-line${index === activeLyricIndex ? " active" : ""}`}
-                        >
-                          {line.text}
-                        </p>
-                      {/each}
-                    </div>
-                  {:else}
-                    <div class="player-flyout-empty">这首歌暂时没有歌词。</div>
-                  {/if}
-                </motion.section>
-              {:else if playlistOpen}
-                <motion.section
-                  key="player-playlist"
-                  class="player-flyout"
-                  data-panel="playlist"
-                  initial={axisEnter("y", 12)}
-                  animate={axisAnimate("y")}
-                  exit={axisExit("y", 8)}
-                  transition={motionTransition(0.18)}
-                >
-                  <div class="player-flyout-header">
-                    <div>
-                      <p class="player-flyout-eyebrow">播放列表</p>
-                      <h3 class="player-flyout-title">当前队列</h3>
-                    </div>
-                    <span class="player-flyout-count"
-                      >{playbackOrder.length} 首</span
-                    >
-                  </div>
-
-                  {#if playbackOrder.length > 0}
-                    <div class="player-playlist-list">
-                      {#each playbackOrder as entry, index (entry.cid)}
-                        <button
-                          type="button"
-                          class={`player-playlist-item${entry.cid === currentSong?.cid ? " active" : ""}`}
-                          onclick={() => {
-                            void playerController.playQueueEntry(entry, playbackOrder, index);
-                          }}
-                        >
-                          <span class="player-playlist-index"
-                            >{String(index + 1).padStart(2, "0")}</span
-                          >
-                          <span class="player-playlist-meta">
-                            <span class="player-playlist-name"
-                              >{entry.name}</span
-                            >
-                            <span class="player-playlist-artists"
-                              >{entry.artists.join(" · ")}</span
-                            >
-                          </span>
-                        </button>
-                      {/each}
-                    </div>
-                  {:else}
-                    <div class="player-flyout-empty">
-                      当前没有可播放的队列。
-                    </div>
-                  {/if}
-                </motion.section>
-              {/if}
-            </AnimatePresence>
-
-            <PlayerDock
-              song={currentSong}
-              {isPlaying}
-              {isPaused}
-              hasPrevious={playerHasPrevious}
-              hasNext={playerHasNext}
-              {progress}
-              {duration}
-              {isLoading}
-              isShuffled={shuffleEnabled}
-              {repeatMode}
-              lyricsActive={lyricsOpen}
-              playlistActive={playlistOpen}
-              downloadState={currentSong
-                ? downloadController.getSongDownloadState(currentSong.cid)
-                : "idle"}
-              downloadDisabled={currentSong
-                ? downloadController.isSongDownloadInteractionBlocked(currentSong.cid)
-                : false}
-              reducedMotion={prefersReducedMotion}
-              onPrevious={playerController.playPrevious}
-              onTogglePlay={isPlaying
-                ? playerController.pause
-                : playerController.resume}
-              onSeek={playerController.seek}
-              onNext={playerController.playNext}
-              onShuffleChange={playerController.toggleShuffle}
-              onRepeatModeChange={playerController.toggleRepeat}
-              onToggleLyrics={playerController.toggleLyrics}
-              onTogglePlaylist={playerController.togglePlaylist}
-              onDownload={() => {
-                if (currentSong) {
-                  return downloadController.handleSongDownload(currentSong.cid);
-                }
-              }}
-            />
-          </div>
-        </motion.div>
-      {/if}
-    </AnimatePresence>
+    <PlayerFlyoutStack
+      song={currentSong}
+      {isPlaying}
+      {isPaused}
+      hasPrevious={playerHasPrevious}
+      hasNext={playerHasNext}
+      {progress}
+      {duration}
+      {isLoading}
+      reducedMotion={prefersReducedMotion}
+      isShuffled={shuffleEnabled}
+      {repeatMode}
+      {lyricsOpen}
+      {playlistOpen}
+      {lyricsLoading}
+      {lyricsError}
+      {lyricsLines}
+      {activeLyricIndex}
+      {playbackOrder}
+      downloadState={currentSong
+        ? downloadController.getSongDownloadState(currentSong.cid)
+        : "idle"}
+      downloadDisabled={currentSong
+        ? downloadController.isSongDownloadInteractionBlocked(currentSong.cid)
+        : false}
+      onPrevious={playerController.playPrevious}
+      onTogglePlay={isPlaying
+        ? playerController.pause
+        : playerController.resume}
+      onSeek={playerController.seek}
+      onNext={playerController.playNext}
+      onShuffleChange={playerController.toggleShuffle}
+      onRepeatModeChange={playerController.toggleRepeat}
+      onToggleLyrics={playerController.toggleLyrics}
+      onTogglePlaylist={playerController.togglePlaylist}
+      onDownload={() => {
+        if (currentSong) {
+          return downloadController.handleSongDownload(currentSong.cid);
+        }
+      }}
+      onPlayQueueEntry={playerController.playQueueEntry}
+    />
   </section>
 
   {#if SettingsSheetView}

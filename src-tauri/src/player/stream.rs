@@ -1,3 +1,8 @@
+//! 播放输入探测、解码与样本缓冲处理。
+//!
+//! 该模块负责描述播放器输入来源、探测音频格式、启动后台解码线程，并通过样本缓冲
+//! 在解码侧与播放后端之间传递 PCM 数据。
+
 use anyhow::{Context, Result};
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};

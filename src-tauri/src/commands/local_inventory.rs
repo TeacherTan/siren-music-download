@@ -1,3 +1,8 @@
+//! 本地库存扫描与快照管理相关的 Tauri command。
+//!
+//! 当前暴露的接口覆盖库存快照读取、重新扫描与扫描取消，
+//! 主要用于前端同步本地文件存在性、校验状态与扫描进度。
+
 use crate::app_state::AppState;
 use crate::local_inventory::{emit_local_inventory_state_changed, spawn_inventory_scan};
 use siren_core::{LocalInventorySnapshot, VerificationMode};

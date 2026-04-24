@@ -1,3 +1,8 @@
+//! Monster Siren 上游接口访问与响应模型。
+//!
+//! 该模块定义专辑、单曲与专辑详情等上游响应结构，并提供带响应缓存的 API 客户端，
+//! 供下载、播放预取、本地库存增强与前端命令层复用。
+
 use crate::local_inventory::{AlbumDownloadBadge, TrackDownloadBadge};
 use anyhow::Result;
 use lru::LruCache;

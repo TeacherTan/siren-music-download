@@ -1,3 +1,8 @@
+//! 播放控制器与播放队列编排逻辑。
+//!
+//! 该模块实现播放器主控制器、前后端共享的播放队列上下文，以及播放、暂停、跳转、
+//! 上下曲切换与系统媒体控制绑定等核心编排能力。
+
 use crate::player::backend::{create_backend, PlaybackBackend};
 use crate::player::events::{emit_progress, emit_state};
 use crate::player::media::MediaSession;

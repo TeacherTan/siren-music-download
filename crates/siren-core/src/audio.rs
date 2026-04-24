@@ -1,3 +1,8 @@
+//! 音频格式识别、音频写盘与 FLAC 标签处理工具。
+//!
+//! 该模块提供音频格式探测、输出格式定义、文件名清洗、音频保存、封面编码与 FLAC
+//! 标签写入等能力，是下载落盘流水线中的音频处理基础模块。
+
 use anyhow::{Context, Result};
 use flacenc::component::BitRepr;
 use flacenc::error::Verify;

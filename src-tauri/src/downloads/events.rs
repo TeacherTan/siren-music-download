@@ -1,3 +1,8 @@
+//! 下载事件名与事件发射辅助函数。
+//!
+//! 该模块定义下载管理器、批次更新与任务进度相关的事件常量，并提供统一的 Tauri
+//! 事件发送入口，供下载桥接层在状态变化后向前端广播快照。
+
 #![allow(dead_code)]
 
 use siren_core::download::model::{DownloadJobSnapshot, DownloadManagerSnapshot};

@@ -1,3 +1,8 @@
+//! 应用偏好读取、保存与导入导出相关的 Tauri command。
+//!
+//! 当前暴露的接口覆盖偏好快照读取、设置落盘、导入导出与通知相关辅助能力，
+//! 主要用于设置面板初始化、持久化保存和环境能力检查。
+
 use crate::app_state::AppState;
 use crate::local_inventory::spawn_inventory_scan;
 use crate::preferences::AppPreferences;

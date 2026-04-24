@@ -1,3 +1,8 @@
+//! 播放器事件常量与事件发射辅助函数。
+//!
+//! 该模块定义播放器状态变化与播放进度推进相关的 Tauri 事件名，并提供统一的快照
+//! 广播入口，供播放器控制器在状态变化后通知前端。
+
 use crate::player::state::PlayerState;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};

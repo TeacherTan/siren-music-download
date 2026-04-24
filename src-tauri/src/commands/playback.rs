@@ -1,3 +1,8 @@
+//! 播放控制与播放器状态读取相关的 Tauri command。
+//!
+//! 当前暴露的接口覆盖点播、暂停、恢复、停止、跳转、上下曲切换与状态查询，
+//! 主要服务于前端播放器、系统媒体控制和播放进度交互。
+
 use crate::app_state::AppState;
 use crate::player::{PlaybackContext, PlayerState};
 use tauri::State;

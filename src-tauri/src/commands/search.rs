@@ -1,3 +1,8 @@
+//! 库内搜索与索引查询相关的 Tauri command。
+//!
+//! 当前暴露的接口覆盖本地库存索引上的搜索请求执行，
+//! 主要用于前端搜索框、筛选切换与结果页的本地召回。
+
 use crate::app_state::AppState;
 use siren_core::{SearchLibraryRequest, SearchLibraryResponse};
 use tauri::State;

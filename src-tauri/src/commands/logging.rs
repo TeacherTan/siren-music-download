@@ -1,3 +1,8 @@
+//! 日志查询与日志文件状态读取相关的 Tauri command。
+//!
+//! 当前暴露的接口覆盖日志分页查询与日志文件状态检查，
+//! 主要用于前端日志面板浏览、筛选与导出前的可用性判断。
+
 use crate::app_state::AppState;
 use crate::logging::{LogFileStatus, LogViewerPage, LogViewerQuery};
 use tauri::State;

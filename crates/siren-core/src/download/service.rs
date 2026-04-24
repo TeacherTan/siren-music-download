@@ -1,3 +1,8 @@
+//! 下载批次状态管理服务。
+//!
+//! 该模块负责创建下载批次、维护任务队列、处理取消与重试、生成管理器快照，并为
+//! 执行桥接层提供稳定的下载状态更新与恢复入口。
+
 use crate::api::ApiClient;
 use crate::download::error::DownloadServiceError;
 use crate::download::model::{

@@ -1,3 +1,8 @@
+//! 系统媒体会话同步封装。
+//!
+//! 该模块负责把播放器状态映射到系统媒体控制中心，并接入系统级播放、暂停、上下曲
+//! 等控制事件，作为桌面宿主与播放器之间的媒体会话桥接层。
+
 use crate::player::state::PlayerState;
 use anyhow::{Context, Result};
 use souvlaki::{

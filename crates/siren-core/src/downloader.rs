@@ -1,3 +1,8 @@
+//! 单曲下载、封面下载与写盘编排工具。
+//!
+//! 该模块负责围绕单首歌曲或专辑封面执行网络下载、元数据构建、歌词侧车准备与最终
+//! 落盘，是下载执行阶段连接上游 API、音频处理与本地文件系统的高层入口。
+
 use crate::api::{AlbumDetail, ApiClient, SongDetail};
 use crate::audio::{
     detect_image_mime, encode_cover_as_jpeg, sanitize_filename, save_audio, tag_flac, AudioFormat,
