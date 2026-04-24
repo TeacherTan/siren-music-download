@@ -3,7 +3,7 @@ import type {
   DownloadHistoryScopeFilter,
   DownloadHistoryStatusFilter,
   DownloadJobSnapshot,
-} from "$lib/types";
+} from '$lib/types';
 
 type SortableDownloadJob = {
   job: DownloadJobSnapshot;
@@ -14,7 +14,7 @@ export function hasCurrentDownloadOptions(
   job: DownloadJobSnapshot,
   outputDir: string,
   format: string,
-  downloadLyrics: boolean,
+  downloadLyrics: boolean
 ): boolean {
   return (
     job.options.outputDir === outputDir &&
@@ -24,27 +24,27 @@ export function hasCurrentDownloadOptions(
 }
 
 export function isJobActive(job: DownloadJobSnapshot): boolean {
-  return job.status === "queued" || job.status === "running";
+  return job.status === 'queued' || job.status === 'running';
 }
 
 export function isTerminalJob(job: DownloadJobSnapshot): boolean {
   return (
-    job.status === "completed" ||
-    job.status === "failed" ||
-    job.status === "cancelled" ||
-    job.status === "partiallyFailed"
+    job.status === 'completed' ||
+    job.status === 'failed' ||
+    job.status === 'cancelled' ||
+    job.status === 'partiallyFailed'
   );
 }
 
 export function sortDownloadJobs(
-  jobs: DownloadJobSnapshot[],
+  jobs: DownloadJobSnapshot[]
 ): DownloadJobSnapshot[] {
   return jobs
     .map(
       (job, originalIndex): SortableDownloadJob => ({
         job,
         originalIndex,
-      }),
+      })
     )
     .sort((left, right) => {
       const leftIsTerminal = isTerminalJob(left.job);
@@ -79,7 +79,7 @@ export function sortDownloadJobs(
 
 export function matchesJobSearch(
   job: DownloadJobSnapshot,
-  normalizedQuery: string,
+  normalizedQuery: string
 ): boolean {
   if (!normalizedQuery) return true;
   return job.title.toLocaleLowerCase().includes(normalizedQuery);
@@ -87,25 +87,25 @@ export function matchesJobSearch(
 
 export function matchesJobScopeFilter(
   job: DownloadJobSnapshot,
-  filter: DownloadHistoryScopeFilter,
+  filter: DownloadHistoryScopeFilter
 ): boolean {
-  if (filter === "all") return true;
-  if (filter === "active") return !isTerminalJob(job);
+  if (filter === 'all') return true;
+  if (filter === 'active') return !isTerminalJob(job);
   return isTerminalJob(job);
 }
 
 export function matchesJobStatusFilter(
   job: DownloadJobSnapshot,
-  filter: DownloadHistoryStatusFilter,
+  filter: DownloadHistoryStatusFilter
 ): boolean {
-  return filter === "all" ? true : job.status === filter;
+  return filter === 'all' ? true : job.status === filter;
 }
 
 export function matchesJobKindFilter(
   job: DownloadJobSnapshot,
-  filter: DownloadHistoryKindFilter,
+  filter: DownloadHistoryKindFilter
 ): boolean {
-  return filter === "all" ? true : job.kind === filter;
+  return filter === 'all' ? true : job.kind === filter;
 }
 
 function parseJobTimestamp(value: string | null): number {

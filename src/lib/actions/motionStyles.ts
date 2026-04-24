@@ -24,11 +24,17 @@ function applyImmediate(node: HTMLElement, styles: MotionStyleTarget = {}) {
       continue;
     }
     // @ts-expect-error dynamic style assignment
-    node.style[key] = typeof value === 'number' && key !== 'opacity' && key !== 'zIndex' ? `${value}px` : String(value);
+    node.style[key] =
+      typeof value === 'number' && key !== 'opacity' && key !== 'zIndex'
+        ? `${value}px`
+        : String(value);
   }
 }
 
-export function motionStyles(node: HTMLElement, params: MotionStylesParams = {}) {
+export function motionStyles(
+  node: HTMLElement,
+  params: MotionStylesParams = {}
+) {
   let controls: { stop?: () => void; cancel?: () => void } | null = null;
 
   const run = (next: MotionStylesParams = {}) => {

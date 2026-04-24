@@ -1,8 +1,8 @@
-import type { PlaybackContext, PlaybackQueueEntry } from "$lib/types";
+import type { PlaybackContext, PlaybackQueueEntry } from '$lib/types';
 
 export function buildPlaybackContext(
   order: PlaybackQueueEntry[],
-  currentIndex: number,
+  currentIndex: number
 ): PlaybackContext | undefined {
   if (!order.length || currentIndex < 0 || currentIndex >= order.length) {
     return undefined;

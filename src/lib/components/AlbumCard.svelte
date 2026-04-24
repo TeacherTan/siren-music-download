@@ -3,7 +3,10 @@
   import { motionStyles } from '$lib/actions/motionStyles';
   import type { Album } from '$lib/types';
   import { lazyLoad } from '$lib/lazyLoad';
-  import { getDownloadBadgeLabel, shouldShowAlbumListDownloadBadge } from '$lib/downloadBadge';
+  import {
+    getDownloadBadgeLabel,
+    shouldShowAlbumListDownloadBadge,
+  } from '$lib/downloadBadge';
 
   interface Props {
     album: Album;
@@ -12,15 +15,23 @@
     onclick?: () => void;
   }
 
-  let { album, selected = false, reducedMotion = false, onclick }: Props = $props();
+  let {
+    album,
+    selected = false,
+    reducedMotion = false,
+    onclick,
+  }: Props = $props();
 
   let isHovered = $state(false);
   let isFocused = $state(false);
 
-  const motionTransition = $derived.by(() => ({
-    duration: reducedMotion ? 0 : 0.16,
-    ease: 'easeOut',
-  } as const));
+  const motionTransition = $derived.by(
+    () =>
+      ({
+        duration: reducedMotion ? 0 : 0.16,
+        ease: 'easeOut',
+      }) as const
+  );
 
   const showCoverLift = $derived.by(() => isHovered || isFocused);
   const showDownloadBadge = $derived.by(() =>
@@ -50,14 +61,18 @@
         y: 0,
       }}
   whileHover={selected
-    ? (reducedMotion ? {} : { y: -1 })
+    ? reducedMotion
+      ? {}
+      : { y: -1 }
     : {
         backgroundColor: 'var(--hover-bg-elevated)',
         boxShadow: '0 2px 8px rgba(15, 23, 42, 0.05)',
         ...(reducedMotion ? {} : { y: -1 }),
       }}
   whileFocus={selected
-    ? (reducedMotion ? {} : { y: -1 })
+    ? reducedMotion
+      ? {}
+      : { y: -1 }
     : {
         backgroundColor: 'var(--hover-bg-elevated)',
         boxShadow: '0 2px 8px rgba(15, 23, 42, 0.05)',
@@ -65,18 +80,28 @@
       }}
   whileTap={reducedMotion ? undefined : { scale: 0.99, y: 0 }}
   transition={motionTransition}
-  onclick={onclick}
-  onmouseenter={() => { isHovered = true; }}
-  onmouseleave={() => { isHovered = false; }}
-  onfocusin={() => { isFocused = true; }}
-  onfocusout={() => { isFocused = false; }}
+  {onclick}
+  onmouseenter={() => {
+    isHovered = true;
+  }}
+  onmouseleave={() => {
+    isHovered = false;
+  }}
+  onfocusin={() => {
+    isFocused = true;
+  }}
+  onfocusout={() => {
+    isFocused = false;
+  }}
 >
   <div
     class="album-cover-wrapper"
     use:lazyLoad={{ rootMargin: '150px', reducedMotion }}
     use:motionStyles={{
       animate: {
-        boxShadow: showCoverLift ? '0 8px 18px rgba(var(--accent-rgb), 0.16)' : '0 0 0 rgba(var(--accent-rgb), 0)',
+        boxShadow: showCoverLift
+          ? '0 8px 18px rgba(var(--accent-rgb), 0.16)'
+          : '0 0 0 rgba(var(--accent-rgb), 0)',
       },
       transition: motionTransition,
       reducedMotion,
@@ -123,7 +148,11 @@
     width: 48px;
     height: 48px;
     border-radius: 8px;
-    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+    background: linear-gradient(
+      135deg,
+      var(--bg-tertiary) 0%,
+      var(--bg-secondary) 100%
+    );
     flex-shrink: 0;
     display: flex;
     align-items: center;

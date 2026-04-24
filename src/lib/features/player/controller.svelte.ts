@@ -1,12 +1,16 @@
-import type { PlaybackContext, PlaybackQueueEntry, PlayerState } from "$lib/types";
-import { parseLyricText } from "./lyrics";
-import { buildPlaybackContext } from "./queue";
+import type {
+  PlaybackContext,
+  PlaybackQueueEntry,
+  PlayerState,
+} from '$lib/types';
+import { parseLyricText } from './lyrics';
+import { buildPlaybackContext } from './queue';
 
 interface PlayerControllerDeps {
   playSong: (
     songCid: string,
     coverUrl: string | null,
-    context: PlaybackContext | null,
+    context: PlaybackContext | null
   ) => Promise<void>;
   pausePlayback: () => Promise<void>;
   resumePlayback: () => Promise<void>;
@@ -15,7 +19,7 @@ interface PlayerControllerDeps {
   notifyError: (message: string) => void;
 }
 
-type RepeatMode = "all" | "one";
+type RepeatMode = 'all' | 'one';
 
 interface PlayerSong {
   cid: string;
@@ -42,14 +46,14 @@ export function createPlayerController(deps: PlayerControllerDeps) {
   let progress = $state(0);
   let duration = $state(0);
   let shuffleEnabled = $state(false);
-  let repeatMode = $state<RepeatMode>("all");
+  let repeatMode = $state<RepeatMode>('all');
   let playbackEntries = $state<PlaybackQueueEntry[]>([]);
   let playbackOrder = $state<PlaybackQueueEntry[]>([]);
   let playbackIndex = $state(-1);
   let lyricsOpen = $state(false);
   let playlistOpen = $state(false);
   let lyricsLoading = $state(false);
-  let lyricsError = $state("");
+  let lyricsError = $state('');
   let lyricsLines = $state<LyricLine[]>([]);
   let lyricsSongCid = $state<string | null>(null);
   let playingCid = $state<string | null>(null);
@@ -70,7 +74,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
 
     return {
       cid: state.songCid,
-      name: state.songName ?? "",
+      name: state.songName ?? '',
       artists: state.artists,
       coverUrl: state.coverUrl ?? null,
     };
@@ -87,7 +91,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
 
   function shufflePlaybackEntries(
     entries: PlaybackQueueEntry[],
-    currentCid: string | null,
+    currentCid: string | null
   ): PlaybackQueueEntry[] {
     if (entries.length <= 1) return [...entries];
 
@@ -111,7 +115,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
 
   function applyPlaybackQueue(
     entries: PlaybackQueueEntry[],
-    currentCid: string | null,
+    currentCid: string | null
   ) {
     playbackEntries = [...entries];
 
@@ -140,7 +144,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
     }
 
     const currentOrderIndex = playbackOrder.findIndex(
-      (entry) => entry.cid === song.cid,
+      (entry) => entry.cid === song.cid
     );
     if (currentOrderIndex >= 0) {
       playbackIndex = currentOrderIndex;
@@ -148,7 +152,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
     }
 
     const currentSourceIndex = playbackEntries.findIndex(
-      (entry) => entry.cid === song.cid,
+      (entry) => entry.cid === song.cid
     );
     if (currentSourceIndex >= 0) {
       applyPlaybackQueue(playbackEntries, song.cid);
@@ -162,7 +166,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
     const requestSeq = ++lyricRequestSeq;
     lyricsSongCid = songCid;
     lyricsLoading = true;
-    lyricsError = "";
+    lyricsError = '';
     lyricsLines = [];
 
     try {
@@ -211,7 +215,8 @@ export function createPlayerController(deps: PlayerControllerDeps) {
 
   function syncPlaybackLifecycle() {
     const songCid = currentSong?.cid ?? null;
-    const isCurrentActive = Boolean(songCid) && (isPlaying || isPaused || isLoading);
+    const isCurrentActive =
+      Boolean(songCid) && (isPlaying || isPaused || isLoading);
     const previousSnapshot = lastPlaybackSnapshot;
 
     if (
@@ -229,7 +234,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
       lyricRequestSeq += 1;
       lyricsSongCid = null;
       lyricsLines = [];
-      lyricsError = "";
+      lyricsError = '';
       lyricsLoading = false;
       lyricsOpen = false;
       playlistOpen = false;
@@ -260,7 +265,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
     entry: PlaybackQueueEntry,
     order = playbackOrder,
     index = order.findIndex((candidate) => candidate.cid === entry.cid),
-    options: { forceRestart?: boolean } = {},
+    options: { forceRestart?: boolean } = {}
   ) {
     if (index < 0) return;
 
@@ -285,11 +290,11 @@ export function createPlayerController(deps: PlayerControllerDeps) {
     playingCid = entry.cid;
     try {
       const context = buildPlaybackContext(playbackOrder, playbackIndex);
-      await deps.playSong(entry.cid, entry.coverUrl ?? null, context);
+      await deps.playSong(entry.cid, entry.coverUrl ?? null, context ?? null);
     } catch (error) {
       playingCid = null;
       deps.notifyError(
-        `播放失败：${error instanceof Error ? error.message : String(error)}`,
+        `播放失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -338,20 +343,25 @@ export function createPlayerController(deps: PlayerControllerDeps) {
   async function handlePlaybackEnded(songCid: string) {
     const requestSeq = ++playbackEndRequestSeq;
 
-    if (repeatMode === "one") {
+    if (repeatMode === 'one') {
       const entry = playbackOrder.find((e) => e.cid === songCid);
       if (entry) {
         const index = playbackOrder.indexOf(entry);
-        await playQueueEntry(entry, playbackOrder, index, { forceRestart: true });
+        await playQueueEntry(entry, playbackOrder, index, {
+          forceRestart: true,
+        });
       }
       return;
     }
 
     if (!playbackOrder.length) return;
-    const currentIndex = playbackOrder.findIndex((entry) => entry.cid === songCid);
+    const currentIndex = playbackOrder.findIndex(
+      (entry) => entry.cid === songCid
+    );
     if (currentIndex < 0) return;
 
-    const nextIndex = currentIndex + 1 >= playbackOrder.length ? 0 : currentIndex + 1;
+    const nextIndex =
+      currentIndex + 1 >= playbackOrder.length ? 0 : currentIndex + 1;
     if (requestSeq !== playbackEndRequestSeq) return;
     await playQueueEntry(playbackOrder[nextIndex], playbackOrder, nextIndex, {
       forceRestart: true,
@@ -363,7 +373,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
       await deps.pausePlayback();
     } catch (error) {
       deps.notifyError(
-        `暂停播放失败：${error instanceof Error ? error.message : String(error)}`,
+        `暂停播放失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -373,7 +383,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
       await deps.resumePlayback();
     } catch (error) {
       deps.notifyError(
-        `恢复播放失败：${error instanceof Error ? error.message : String(error)}`,
+        `恢复播放失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -384,7 +394,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
       await deps.seekCurrentPlayback(positionSecs);
     } catch (error) {
       deps.notifyError(
-        `跳转播放进度失败：${error instanceof Error ? error.message : String(error)}`,
+        `跳转播放进度失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -408,7 +418,7 @@ export function createPlayerController(deps: PlayerControllerDeps) {
     await playQueueEntry(
       playbackOrder[previousIndex],
       playbackOrder,
-      previousIndex,
+      previousIndex
     );
   }
 
@@ -423,14 +433,14 @@ export function createPlayerController(deps: PlayerControllerDeps) {
     progress = 0;
     duration = 0;
     shuffleEnabled = false;
-    repeatMode = "all";
+    repeatMode = 'all';
     playbackEntries = [];
     playbackOrder = [];
     playbackIndex = -1;
     lyricsOpen = false;
     playlistOpen = false;
     lyricsLoading = false;
-    lyricsError = "";
+    lyricsError = '';
     lyricsLines = [];
     lyricsSongCid = null;
     playingCid = null;

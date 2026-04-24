@@ -8,12 +8,8 @@ import type {
   DownloadTaskProgressEvent,
   DownloadTaskSnapshot,
   OutputFormat,
-} from "$lib/types";
-import {
-  buildSelectionKey,
-  formatByteSize,
-  formatSpeed,
-} from "./formatters";
+} from '$lib/types';
+import { buildSelectionKey, formatByteSize, formatSpeed } from './formatters';
 import {
   hasCurrentDownloadOptions,
   isJobActive as isActiveDownloadJob,
@@ -23,21 +19,21 @@ import {
   matchesJobSearch,
   matchesJobStatusFilter,
   sortDownloadJobs,
-} from "./guards";
+} from './guards';
 
 interface DownloadControllerDeps {
   createDownloadJob: (
-    request: CreateDownloadJobRequest,
+    request: CreateDownloadJobRequest
   ) => Promise<DownloadJobSnapshot>;
   cancelDownloadJob: (jobId: string) => Promise<DownloadJobSnapshot | null>;
   cancelDownloadTask: (
     jobId: string,
-    taskId: string,
+    taskId: string
   ) => Promise<DownloadJobSnapshot | null>;
   retryDownloadJob: (jobId: string) => Promise<DownloadJobSnapshot | null>;
   retryDownloadTask: (
     jobId: string,
-    taskId: string,
+    taskId: string
   ) => Promise<DownloadJobSnapshot | null>;
   clearDownloadHistory: () => Promise<number>;
   openDownloadPanel: (resetFilters?: boolean) => Promise<void>;
@@ -50,7 +46,7 @@ interface DownloadControllerDeps {
   notifyError: (message: string) => void;
 }
 
-type SongDownloadState = "idle" | "creating" | "queued" | "running";
+type SongDownloadState = 'idle' | 'creating' | 'queued' | 'running';
 
 let initialized = false;
 
@@ -59,10 +55,10 @@ export function createDownloadController(deps: DownloadControllerDeps) {
   let downloadingSongCid = $state<string | null>(null);
   let downloadingAlbumCid = $state<string | null>(null);
   let creatingSelectionKey = $state<string | null>(null);
-  let searchQuery = $state("");
-  let scopeFilter = $state<DownloadHistoryScopeFilter>("all");
-  let statusFilter = $state<DownloadHistoryStatusFilter>("all");
-  let kindFilter = $state<DownloadHistoryKindFilter>("all");
+  let searchQuery = $state('');
+  let scopeFilter = $state<DownloadHistoryScopeFilter>('all');
+  let statusFilter = $state<DownloadHistoryStatusFilter>('all');
+  let kindFilter = $state<DownloadHistoryKindFilter>('all');
   let taskSpeedMap = $state<Map<string, number>>(new Map());
   let managerInitSeq = 0;
   let managerHydratedFromEvent = false;
@@ -78,7 +74,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
   function applyManagerSnapshot(
     snapshot: DownloadManagerSnapshot,
-    requestSeq: number,
+    requestSeq: number
   ) {
     if (requestSeq !== managerInitSeq || managerHydratedFromEvent) {
       return;
@@ -94,7 +90,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
   function applyJobUpdate(job: DownloadJobSnapshot) {
     if (!manager) return;
     const jobs = manager.jobs.map((candidate) =>
-      candidate.id === job.id ? job : candidate,
+      candidate.id === job.id ? job : candidate
     );
     manager = { ...manager, jobs };
   }
@@ -104,7 +100,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
     taskSpeedMap = new Map(taskSpeedMap).set(
       event.taskId,
-      event.speedBytesPerSec,
+      event.speedBytesPerSec
     );
 
     const jobIdx = manager.jobs.findIndex((job) => job.id === event.jobId);
@@ -122,10 +118,10 @@ export function createDownloadController(deps: DownloadControllerDeps) {
   }
 
   function resetFilters() {
-    searchQuery = "";
-    scopeFilter = "all";
-    statusFilter = "all";
-    kindFilter = "all";
+    searchQuery = '';
+    scopeFilter = 'all';
+    statusFilter = 'all';
+    kindFilter = 'all';
   }
 
   function getFilteredJobs(): DownloadJobSnapshot[] {
@@ -145,7 +141,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
   }
 
   function findSelectionDownloadJob(
-    songCids: string[],
+    songCids: string[]
   ): DownloadJobSnapshot | null {
     if (!manager || songCids.length === 0) return null;
 
@@ -153,14 +149,14 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     const targetKey = buildSelectionKey(songCids);
     return (
       manager.jobs.find((job) => {
-        if (job.kind !== "selection") return false;
+        if (job.kind !== 'selection') return false;
         if (!isActiveDownloadJob(job)) return false;
         if (
           !hasCurrentDownloadOptions(
             job,
             options.outputDir,
             options.format,
-            options.downloadLyrics,
+            options.downloadLyrics
           )
         ) {
           return false;
@@ -182,7 +178,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
   }
 
   function getCurrentSelectionJob(
-    songCids: string[],
+    songCids: string[]
   ): DownloadJobSnapshot | null {
     return findSelectionDownloadJob(songCids);
   }
@@ -201,14 +197,14 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     const options = getDownloadOptions();
     return (
       manager.jobs.find((job) => {
-        if (job.kind !== "album") return false;
+        if (job.kind !== 'album') return false;
         if (!isActiveDownloadJob(job)) return false;
         if (
           !hasCurrentDownloadOptions(
             job,
             options.outputDir,
             options.format,
-            options.downloadLyrics,
+            options.downloadLyrics
           )
         ) {
           return false;
@@ -236,27 +232,27 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
   function getSongDownloadState(songCid: string): SongDownloadState {
     if (downloadingSongCid === songCid) {
-      return "creating";
+      return 'creating';
     }
 
     const task = findSongDownloadTask(songCid);
     if (!task) {
-      return "idle";
+      return 'idle';
     }
 
-    if (task.status === "queued") {
-      return "queued";
+    if (task.status === 'queued') {
+      return 'queued';
     }
 
     if (
-      task.status === "preparing" ||
-      task.status === "downloading" ||
-      task.status === "writing"
+      task.status === 'preparing' ||
+      task.status === 'downloading' ||
+      task.status === 'writing'
     ) {
-      return "running";
+      return 'running';
     }
 
-    return "idle";
+    return 'idle';
   }
 
   function getSongDownloadJob(songCid: string): DownloadJobSnapshot | null {
@@ -271,9 +267,9 @@ export function createDownloadController(deps: DownloadControllerDeps) {
             job,
             options.outputDir,
             options.format,
-            options.downloadLyrics,
+            options.downloadLyrics
           ) &&
-          job.tasks.some((task) => task.songCid === songCid),
+          job.tasks.some((task) => task.songCid === songCid)
       ) ?? null
     );
   }
@@ -291,7 +287,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     downloadingSongCid = songCid;
     try {
       const request: CreateDownloadJobRequest = {
-        kind: "song",
+        kind: 'song',
         songCids: [songCid],
         albumCid: null,
         options,
@@ -311,16 +307,18 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       const existingJob = getSongDownloadJob(songCid);
       await performSongDownload(songCid);
       if (existingJob) {
-        deps.notifyInfo("这首歌的下载任务已在队列中或正在执行。");
+        deps.notifyInfo('这首歌的下载任务已在队列中或正在执行。');
       }
     } catch (error) {
       deps.notifyError(
-        `下载失败：${error instanceof Error ? error.message : String(error)}`,
+        `下载失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
 
-  async function performAlbumDownload(albumCid: string): Promise<string | null> {
+  async function performAlbumDownload(
+    albumCid: string
+  ): Promise<string | null> {
     const existingJob = findAlbumDownloadJob(albumCid);
     if (existingJob) {
       await deps.openDownloadPanel();
@@ -335,7 +333,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     downloadingAlbumCid = albumCid;
     try {
       const request: CreateDownloadJobRequest = {
-        kind: "album",
+        kind: 'album',
         songCids: [],
         albumCid,
         options,
@@ -357,17 +355,17 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       const existingJob = findAlbumDownloadJob(albumCid);
       await performAlbumDownload(albumCid);
       if (existingJob) {
-        deps.notifyInfo("这张专辑的下载任务已在队列中或正在执行。");
+        deps.notifyInfo('这张专辑的下载任务已在队列中或正在执行。');
       }
     } catch (error) {
       deps.notifyError(
-        `整专下载失败：${error instanceof Error ? error.message : String(error)}`,
+        `整专下载失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
 
   async function performSelectionDownload(
-    songCids: string[],
+    songCids: string[]
   ): Promise<string | null> {
     if (songCids.length === 0) return null;
 
@@ -386,7 +384,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     creatingSelectionKey = selectionKey;
     try {
       const request: CreateDownloadJobRequest = {
-        kind: "selection",
+        kind: 'selection',
         songCids,
         albumCid: null,
         options,
@@ -403,7 +401,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
   async function handleSelectionDownload(
     songCids: string[],
-    options?: { afterCreated?: () => void | Promise<void> },
+    options?: { afterCreated?: () => void | Promise<void> }
   ) {
     if (songCids.length === 0) return;
 
@@ -411,7 +409,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       const existingJob = findSelectionDownloadJob(songCids);
       const jobId = await performSelectionDownload(songCids);
       if (existingJob) {
-        deps.notifyInfo("这组歌曲的下载任务已在队列中或正在执行。");
+        deps.notifyInfo('这组歌曲的下载任务已在队列中或正在执行。');
         return;
       }
       if (jobId) {
@@ -419,27 +417,27 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       }
     } catch (error) {
       deps.notifyError(
-        `批量下载失败：${error instanceof Error ? error.message : String(error)}`,
+        `批量下载失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
 
   function getTaskProgressLabel(task: DownloadTaskSnapshot): string | null {
-    if (task.status !== "downloading" && task.status !== "writing") {
+    if (task.status !== 'downloading' && task.status !== 'writing') {
       return null;
     }
 
     if (
-      task.status === "downloading" &&
+      task.status === 'downloading' &&
       task.bytesTotal &&
       task.bytesTotal > 0
     ) {
       const percent = Math.min(
         Math.round((task.bytesDone / task.bytesTotal) * 100),
-        100,
+        100
       );
       const speed = taskSpeedMap.get(task.id);
-      const speedText = speed && speed > 0 ? ` · ${formatSpeed(speed)}` : "";
+      const speedText = speed && speed > 0 ? ` · ${formatSpeed(speed)}` : '';
       return `${formatByteSize(task.bytesDone)} / ${formatByteSize(task.bytesTotal)} · ${percent}%${speedText}`;
     }
 
@@ -447,7 +445,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       return `${formatByteSize(task.bytesDone)} 已处理`;
     }
 
-    return task.status === "writing" ? "正在整理文件..." : "正在接收数据...";
+    return task.status === 'writing' ? '正在整理文件...' : '正在接收数据...';
   }
 
   function getTaskErrorLabel(task: DownloadTaskSnapshot): string | null {
@@ -462,14 +460,14 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
   function getJobErrorSummary(job: DownloadJobSnapshot): string | null {
     const firstFailedTask = job.tasks.find(
-      (task) => task.status === "failed" && task.error,
+      (task) => task.status === 'failed' && task.error
     );
     if (firstFailedTask) {
       return getTaskErrorLabel(firstFailedTask);
     }
 
     const firstCancelledTask = job.tasks.find(
-      (task) => task.status === "cancelled" && task.error,
+      (task) => task.status === 'cancelled' && task.error
     );
     if (firstCancelledTask) {
       return getTaskErrorLabel(firstCancelledTask);
@@ -489,9 +487,9 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       job.completedTaskCount + job.failedTaskCount + job.cancelledTaskCount;
     const activeTask = job.tasks.find(
       (task) =>
-        task.status === "preparing" ||
-        task.status === "downloading" ||
-        task.status === "writing",
+        task.status === 'preparing' ||
+        task.status === 'downloading' ||
+        task.status === 'writing'
     );
 
     const base = `${terminalCount}/${job.taskCount} 首已结束`;
@@ -514,9 +512,9 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       job.completedTaskCount + job.failedTaskCount + job.cancelledTaskCount;
     const activeTask = job.tasks.find(
       (task) =>
-        task.status === "preparing" ||
-        task.status === "downloading" ||
-        task.status === "writing",
+        task.status === 'preparing' ||
+        task.status === 'downloading' ||
+        task.status === 'writing'
     );
 
     if (!activeTask) {
@@ -524,9 +522,9 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     }
 
     const activeTaskProgress =
-      activeTask.status === "downloading" && activeTask.bytesTotal
+      activeTask.status === 'downloading' && activeTask.bytesTotal
         ? activeTask.bytesDone / activeTask.bytesTotal
-        : activeTask.status === "writing"
+        : activeTask.status === 'writing'
           ? 1
           : 0;
 
@@ -535,28 +533,28 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
   function getJobStatusLabel(job: DownloadJobSnapshot): string {
     switch (job.status) {
-      case "queued":
-        return "排队中";
-      case "running": {
+      case 'queued':
+        return '排队中';
+      case 'running': {
         const activeTask = job.tasks.find(
           (task) =>
-            task.status === "preparing" ||
-            task.status === "downloading" ||
-            task.status === "writing",
+            task.status === 'preparing' ||
+            task.status === 'downloading' ||
+            task.status === 'writing'
         );
         const currentIndex = activeTask
           ? activeTask.songIndex + 1
           : job.completedTaskCount;
         return `下载中 (${currentIndex}/${job.taskCount})`;
       }
-      case "completed":
-        return "已完成";
-      case "partiallyFailed":
+      case 'completed':
+        return '已完成';
+      case 'partiallyFailed':
         return `部分失败 (${job.failedTaskCount}/${job.taskCount})`;
-      case "failed":
-        return "失败";
-      case "cancelled":
-        return "已取消";
+      case 'failed':
+        return '失败';
+      case 'cancelled':
+        return '已取消';
       default:
         return job.status;
     }
@@ -564,24 +562,24 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
   function getTaskStatusLabel(task: DownloadTaskSnapshot): string {
     switch (task.status) {
-      case "queued":
-        return "排队中";
-      case "preparing":
-        return "准备中";
-      case "downloading": {
+      case 'queued':
+        return '排队中';
+      case 'preparing':
+        return '准备中';
+      case 'downloading': {
         const progressLabel = getTaskProgressLabel(task);
-        return progressLabel ?? "下载中...";
+        return progressLabel ?? '下载中...';
       }
-      case "writing": {
+      case 'writing': {
         const progressLabel = getTaskProgressLabel(task);
-        return progressLabel ? `写入中 · ${progressLabel}` : "写入中";
+        return progressLabel ? `写入中 · ${progressLabel}` : '写入中';
       }
-      case "completed":
-        return "已完成";
-      case "failed":
-        return "失败";
-      case "cancelled":
-        return "已取消";
+      case 'completed':
+        return '已完成';
+      case 'failed':
+        return '失败';
+      case 'cancelled':
+        return '已取消';
       default:
         return task.status;
     }
@@ -589,12 +587,12 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
   function getJobKindLabel(job: DownloadJobSnapshot): string {
     switch (job.kind) {
-      case "song":
-        return "单曲下载";
-      case "album":
-        return "整专下载";
-      case "selection":
-        return "多选下载";
+      case 'song':
+        return '单曲下载';
+      case 'album':
+        return '整专下载';
+      case 'selection':
+        return '多选下载';
       default:
         return job.kind;
     }
@@ -608,7 +606,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     const albumCount = getSelectionJobAlbumCount(job);
     if (albumCount <= 1) {
       const albumName = job.tasks[0]?.albumName;
-      return albumName ? `来自《${albumName}》` : "来自同一张专辑";
+      return albumName ? `来自《${albumName}》` : '来自同一张专辑';
     }
 
     return `跨 ${albumCount} 张专辑`;
@@ -616,13 +614,13 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
   function getJobSummaryLabel(job: DownloadJobSnapshot): string {
     switch (job.kind) {
-      case "song": {
+      case 'song': {
         const task = job.tasks[0];
-        return task?.albumName ? `来自《${task.albumName}》` : "单曲任务";
+        return task?.albumName ? `来自《${task.albumName}》` : '单曲任务';
       }
-      case "album":
+      case 'album':
         return `${job.taskCount} 首歌曲`;
-      case "selection": {
+      case 'selection': {
         if (job.taskCount <= 1) {
           return getSelectionJobScopeLabel(job);
         }
@@ -645,15 +643,15 @@ export function createDownloadController(deps: DownloadControllerDeps) {
 
   function canCancelTask(task: DownloadTaskSnapshot): boolean {
     return (
-      task.status === "queued" ||
-      task.status === "preparing" ||
-      task.status === "downloading" ||
-      task.status === "writing"
+      task.status === 'queued' ||
+      task.status === 'preparing' ||
+      task.status === 'downloading' ||
+      task.status === 'writing'
     );
   }
 
   function canRetryTask(task: DownloadTaskSnapshot): boolean {
-    return task.status === "failed" || task.status === "cancelled";
+    return task.status === 'failed' || task.status === 'cancelled';
   }
 
   function canClearDownloadHistory(): boolean {
@@ -665,7 +663,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       await deps.cancelDownloadJob(jobId);
     } catch (error) {
       deps.notifyError(
-        `取消下载任务失败：${error instanceof Error ? error.message : String(error)}`,
+        `取消下载任务失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -675,7 +673,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       await deps.cancelDownloadTask(jobId, taskId);
     } catch (error) {
       deps.notifyError(
-        `取消下载子任务失败：${error instanceof Error ? error.message : String(error)}`,
+        `取消下载子任务失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -685,7 +683,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       await deps.retryDownloadJob(jobId);
     } catch (error) {
       deps.notifyError(
-        `重试下载任务失败：${error instanceof Error ? error.message : String(error)}`,
+        `重试下载任务失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -695,7 +693,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
       await deps.retryDownloadTask(jobId, taskId);
     } catch (error) {
       deps.notifyError(
-        `重试下载子任务失败：${error instanceof Error ? error.message : String(error)}`,
+        `重试下载子任务失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -704,11 +702,11 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     try {
       const removed = await deps.clearDownloadHistory();
       if (removed === 0) {
-        deps.notifyInfo("当前没有可清理的下载历史。");
+        deps.notifyInfo('当前没有可清理的下载历史。');
       }
     } catch (error) {
       deps.notifyError(
-        `清理下载历史失败：${error instanceof Error ? error.message : String(error)}`,
+        `清理下载历史失败：${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -717,15 +715,16 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     await deps.openDownloadPanel(resetFilters);
   }
 
-  function dispose() {    initialized = false;
+  function dispose() {
+    initialized = false;
     manager = null;
     downloadingSongCid = null;
     downloadingAlbumCid = null;
     creatingSelectionKey = null;
-    searchQuery = "";
-    scopeFilter = "all";
-    statusFilter = "all";
-    kindFilter = "all";
+    searchQuery = '';
+    scopeFilter = 'all';
+    statusFilter = 'all';
+    kindFilter = 'all';
     taskSpeedMap = new Map();
     managerInitSeq += 1;
     managerHydratedFromEvent = false;

@@ -9,12 +9,23 @@
     style?: string;
   }
 
-  let { className = '', reducedMotion = false, delay = 0, duration = 1.8, style = '' }: Props = $props();
+  let {
+    className = '',
+    reducedMotion = false,
+    delay = 0,
+    duration = 1.8,
+    style = '',
+  }: Props = $props();
 </script>
 
 <motion.div
   class={className}
-  style={style}
+  {style}
   animate={reducedMotion ? { opacity: 1 } : { opacity: [0.46, 0.92, 0.46] }}
-  transition={{ duration: reducedMotion ? 0 : duration, ease: 'easeInOut', repeat: reducedMotion ? 0 : Infinity, delay: reducedMotion ? 0 : delay }}
+  transition={{
+    duration: reducedMotion ? 0 : duration,
+    ease: 'easeInOut',
+    repeat: reducedMotion ? 0 : Infinity,
+    delay: reducedMotion ? 0 : delay,
+  }}
 />

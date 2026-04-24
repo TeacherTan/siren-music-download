@@ -1,4 +1,4 @@
-import type { DownloadManagerSnapshot } from "$lib/types";
+import type { DownloadManagerSnapshot } from '$lib/types';
 
 let manager = $state<DownloadManagerSnapshot | null>(null);
 let initialized = false;

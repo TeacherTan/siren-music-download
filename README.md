@@ -62,15 +62,27 @@
 仓库前端依赖统一使用 `Bun` 管理，`bun.lock` 是唯一 JS 锁文件，需要提交到仓库。
 
 ```bash
+# 安装依赖与启动开发
 bun install
 bun run tauri:dev
 ```
 
 ```bash
-bun run check
+# 格式化与检查
+bun run format              # 格式化前端代码与 Markdown 文档
+bun run format:check        # 检查格式是否符合规范
+bun run lint                # 运行前端 ESLint 与 Rust fmt 检查
+bun run check               # 运行格式、lint、类型、前端构建与 Rust workspace 检查
+cargo fmt --all             # 格式化 Rust 代码
+cargo test --workspace      # 运行 Rust 工作区测试
+```
+
+```bash
+# 构建
 bun run build
 bun run tauri:build
 cargo check --workspace
+cargo test --workspace
 ```
 
 文档相关命令（按需执行）：
@@ -80,6 +92,12 @@ cargo doc -p siren_core --no-deps
 cargo doc -p siren-music-download --lib --no-deps --document-private-items
 cargo doc -p siren-music-download --bin siren-music-download --no-deps --document-private-items
 ```
+
+### 代码规范
+
+- **前端代码与 Markdown 文档**：使用 Prettier 统一格式化
+- **前端静态规则检查**：使用 ESLint
+- **Rust 代码格式化**：使用 `cargo fmt --all`
 
 开发相关文档：
 

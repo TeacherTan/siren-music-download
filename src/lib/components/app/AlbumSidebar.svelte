@@ -1,15 +1,15 @@
 <script lang="ts">
-  import * as Select from "$lib/components/ui/select/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
-  import AlbumCard from "$lib/components/AlbumCard.svelte";
-  import MotionSpinner from "$lib/components/MotionSpinner.svelte";
+  import * as Select from '$lib/components/ui/select/index.js';
+  import { Input } from '$lib/components/ui/input/index.js';
+  import AlbumCard from '$lib/components/AlbumCard.svelte';
+  import MotionSpinner from '$lib/components/MotionSpinner.svelte';
   import type {
     Album,
     LibraryIndexState,
     SearchLibraryResponse,
     SearchLibraryResultItem,
     LibrarySearchScope,
-  } from "$lib/types";
+  } from '$lib/types';
 
   interface Props {
     albums: Album[];
@@ -28,9 +28,9 @@
   }
 
   const scopeOptions: Array<{ value: LibrarySearchScope; label: string }> = [
-    { value: "all", label: "全部" },
-    { value: "albums", label: "专辑" },
-    { value: "songs", label: "歌曲" },
+    { value: 'all', label: '全部' },
+    { value: 'albums', label: '专辑' },
+    { value: 'songs', label: '歌曲' },
   ];
 
   let {
@@ -38,9 +38,9 @@
     selectedAlbumCid,
     reducedMotion,
     loadingAlbums = false,
-    errorMsg = "",
-    searchQuery = "",
-    searchScope = "all",
+    errorMsg = '',
+    searchQuery = '',
+    searchScope = 'all',
     searchLoading = false,
     searchResponse = null,
     onSearchQueryChange,
@@ -51,22 +51,22 @@
 
   const trimmedSearchQuery = $derived.by(() => searchQuery.trim());
   const isSearchMode = $derived.by(() => trimmedSearchQuery.length > 0);
-  const searchIndexState = $derived.by<LibraryIndexState>(() =>
-    searchResponse?.indexState ?? "notReady",
+  const searchIndexState = $derived.by<LibraryIndexState>(
+    () => searchResponse?.indexState ?? 'notReady'
   );
   const isSearchIndexBuilding = $derived.by(
-    () => isSearchMode && !searchLoading && searchIndexState === "building",
+    () => isSearchMode && !searchLoading && searchIndexState === 'building'
   );
   const searchStatusMessage = $derived.by(() => {
-    if (!isSearchMode) return "";
-    if (searchLoading) return "正在搜索…";
+    if (!isSearchMode) return '';
+    if (searchLoading) return '正在搜索…';
     switch (searchIndexState) {
-      case "stale":
-        return "索引正在刷新，暂时不可用。";
-      case "notReady":
-        return "搜索索引尚未就绪。";
+      case 'stale':
+        return '索引正在刷新，暂时不可用。';
+      case 'notReady':
+        return '搜索索引尚未就绪。';
       default:
-        return "";
+        return '';
     }
   });
 </script>
@@ -88,10 +88,12 @@
     <Select.Root
       type="single"
       value={searchScope}
-      onValueChange={(value) => onSearchScopeChange(value as LibrarySearchScope)}
+      onValueChange={(value) =>
+        onSearchScopeChange(value as LibrarySearchScope)}
     >
       <Select.Trigger class="w-full border-white/35 bg-white/20">
-        {scopeOptions.find((option) => option.value === searchScope)?.label ?? "全部"}
+        {scopeOptions.find((option) => option.value === searchScope)?.label ??
+          '全部'}
       </Select.Trigger>
       <Select.Content>
         {#each scopeOptions as option (option.value)}
@@ -105,7 +107,7 @@
     <div class="loading">
       <span>正在加载专辑...</span><MotionSpinner
         className="inline-loading-spinner"
-        reducedMotion={reducedMotion}
+        {reducedMotion}
       />
     </div>
   {:else if errorMsg && albums.length === 0}
@@ -126,7 +128,9 @@
           aria-label="搜索索引构建进度"
           aria-valuetext="索引正在构建中"
         >
-          <div class={`search-status-progress-bar${reducedMotion ? ' is-reduced-motion' : ''}`}></div>
+          <div
+            class={`search-status-progress-bar${reducedMotion ? ' is-reduced-motion' : ''}`}
+          ></div>
         </div>
         <div class="search-status-hint">首次扫描完成后即可看到搜索结果。</div>
       </div>
@@ -142,12 +146,16 @@
             class={`search-result${selectedAlbumCid === item.albumCid ? ' is-selected' : ''}`}
             onclick={() => onSelectSearchResult(item)}
           >
-            <div class="search-result-kind">{item.kind === "album" ? "专辑" : "歌曲"}</div>
+            <div class="search-result-kind">
+              {item.kind === 'album' ? '专辑' : '歌曲'}
+            </div>
             <div class="search-result-title">
-              {item.kind === "song" && item.songTitle ? item.songTitle : item.albumTitle}
+              {item.kind === 'song' && item.songTitle
+                ? item.songTitle
+                : item.albumTitle}
             </div>
             <div class="search-result-subtitle">
-              {#if item.kind === "song"}
+              {#if item.kind === 'song'}
                 <span>{item.albumTitle}</span>
               {/if}
               {#if item.artistLine}
@@ -168,7 +176,7 @@
         <AlbumCard
           {album}
           selected={selectedAlbumCid === album.cid}
-          reducedMotion={reducedMotion}
+          {reducedMotion}
           onclick={() => onSelect(album)}
         />
       {/each}
@@ -245,7 +253,9 @@
     border: 1px solid rgba(255, 255, 255, 0.28);
     background: rgba(255, 255, 255, 0.22);
     text-align: left;
-    transition: background-color 0.16s ease, border-color 0.16s ease;
+    transition:
+      background-color 0.16s ease,
+      border-color 0.16s ease;
   }
 
   .search-result:hover,

@@ -1,7 +1,10 @@
 <script lang="ts">
   import { motion } from '@humanspeak/svelte-motion';
   import type { SongEntry } from '$lib/types';
-  import { getDownloadBadgeLabel, shouldShowDownloadBadge } from '$lib/downloadBadge';
+  import {
+    getDownloadBadgeLabel,
+    shouldShowDownloadBadge,
+  } from '$lib/downloadBadge';
 
   type SongDownloadState = 'idle' | 'creating' | 'queued' | 'running';
 
@@ -38,8 +41,12 @@
   let isHovered = $state(false);
   let isFocused = $state(false);
 
-  const showEmphasis = $derived.by(() => isPlaying || isHovered || isFocused || isSelected);
-  const showPlayIndicator = $derived.by(() => isPlaying || isHovered || isFocused);
+  const showEmphasis = $derived.by(
+    () => isPlaying || isHovered || isFocused || isSelected
+  );
+  const showPlayIndicator = $derived.by(
+    () => isPlaying || isHovered || isFocused
+  );
   const showDownloadedBadge = $derived.by(() =>
     shouldShowDownloadBadge(song.download.downloadStatus)
   );
@@ -47,7 +54,9 @@
     getDownloadBadgeLabel(song.download.downloadStatus)
   );
   const isBusy = $derived.by(() => downloadState !== 'idle');
-  const isDownloadDisabled = $derived.by(() => isBusy || downloadDisabled || selectionMode);
+  const isDownloadDisabled = $derived.by(
+    () => isBusy || downloadDisabled || selectionMode
+  );
   const downloadButtonLabel = $derived.by(() => {
     switch (downloadState) {
       case 'creating':
@@ -114,16 +123,21 @@
     return {
       opacity: showPlayIndicator ? 1 : 0,
       scale: reducedMotion ? 1 : showPlayIndicator ? 1 : 0.92,
-      backgroundColor: showPlayIndicator ? 'rgba(var(--accent-rgb), 0.1)' : 'rgba(15, 23, 42, 0.05)',
+      backgroundColor: showPlayIndicator
+        ? 'rgba(var(--accent-rgb), 0.1)'
+        : 'rgba(15, 23, 42, 0.05)',
       color: showPlayIndicator ? 'var(--accent)' : 'var(--text-secondary)',
       boxShadow: '0 0 0 rgba(var(--accent-rgb), 0)',
     };
   });
 
-  const motionTransition = $derived.by(() => ({
-    duration: reducedMotion ? 0 : 0.16,
-    ease: 'easeOut',
-  } as const));
+  const motionTransition = $derived.by(
+    () =>
+      ({
+        duration: reducedMotion ? 0 : 0.16,
+        ease: 'easeOut',
+      }) as const
+  );
 
   function handleRowActivate() {
     if (selectionMode) {
@@ -146,10 +160,18 @@
   whileTap={reducedMotion ? undefined : { scale: 0.996 }}
   transition={motionTransition}
   onclick={handleRowActivate}
-  onmouseenter={() => { isHovered = true; }}
-  onmouseleave={() => { isHovered = false; }}
-  onfocusin={() => { isFocused = true; }}
-  onfocusout={() => { isFocused = false; }}
+  onmouseenter={() => {
+    isHovered = true;
+  }}
+  onmouseleave={() => {
+    isHovered = false;
+  }}
+  onfocusin={() => {
+    isFocused = true;
+  }}
+  onfocusout={() => {
+    isFocused = false;
+  }}
   onkeydown={(e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -186,7 +208,9 @@
   <div class="song-info">
     <motion.div
       class="song-name"
-      animate={{ color: showEmphasis ? 'var(--accent)' : 'var(--text-primary)' }}
+      animate={{
+        color: showEmphasis ? 'var(--accent)' : 'var(--text-primary)',
+      }}
       transition={motionTransition}
     >
       {song.name}
@@ -231,8 +255,16 @@
       animate={{
         opacity: isDownloadDisabled ? 0.52 : isBusy ? 0.78 : 1,
         scale: 1,
-        backgroundColor: isBusy ? 'rgba(var(--accent-rgb), 0.12)' : showEmphasis ? 'rgba(var(--accent-rgb), 0.08)' : 'rgba(15, 23, 42, 0.04)',
-        color: isBusy ? 'var(--accent)' : showEmphasis ? 'var(--accent)' : 'var(--text-secondary)',
+        backgroundColor: isBusy
+          ? 'rgba(var(--accent-rgb), 0.12)'
+          : showEmphasis
+            ? 'rgba(var(--accent-rgb), 0.08)'
+            : 'rgba(15, 23, 42, 0.04)',
+        color: isBusy
+          ? 'var(--accent)'
+          : showEmphasis
+            ? 'var(--accent)'
+            : 'var(--text-secondary)',
       }}
       transition={motionTransition}
       onclick={(event: MouseEvent) => {
@@ -251,26 +283,60 @@
           stroke-linecap="round"
           stroke-linejoin="round"
           animate={reducedMotion ? undefined : { rotate: 360 }}
-          transition={{ duration: 0.9, ease: 'linear', repeat: reducedMotion ? 0 : Infinity }}
+          transition={{
+            duration: 0.9,
+            ease: 'linear',
+            repeat: reducedMotion ? 0 : Infinity,
+          }}
         >
           <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
           <path d="M21 3v6h-6"></path>
         </motion.svg>
       {:else if downloadState === 'queued'}
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.1"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
           <path d="M12 7v5"></path>
           <path d="m9.5 10.5 2.5 2.5 2.5-2.5"></path>
           <path d="M5 18h14"></path>
           <path d="M8 4.5h8"></path>
         </svg>
       {:else if downloadState === 'running'}
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.1"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
           <path d="M12 5v9"></path>
           <path d="m8.5 10.5 3.5 3.5 3.5-3.5"></path>
           <path d="M5 18h14"></path>
         </svg>
       {:else}
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.1"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="7 10 12 15 17 10"></polyline>
           <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -349,7 +415,10 @@
     justify-content: center;
     cursor: pointer;
     flex-shrink: 0;
-    transition: background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+    transition:
+      background 0.16s ease,
+      border-color 0.16s ease,
+      opacity 0.16s ease;
   }
 
   .song-selection-toggle.is-selected {
@@ -368,7 +437,10 @@
     border-radius: 50%;
     background: transparent;
     box-shadow: inset 0 0 0 1.5px rgba(var(--accent-rgb), 0.4);
-    transition: background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+    transition:
+      background 0.16s ease,
+      box-shadow 0.16s ease,
+      transform 0.16s ease;
   }
 
   .song-selection-toggle.is-selected .song-selection-dot {

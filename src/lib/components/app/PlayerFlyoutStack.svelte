@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { AnimatePresence, motion } from "@humanspeak/svelte-motion";
-  import PlayerDock from "$lib/components/app/PlayerDock.svelte";
-  import type { PlaybackQueueEntry } from "$lib/types";
-  import type { LyricLine } from "$lib/features/player/lyrics";
+  import { AnimatePresence, motion } from '@humanspeak/svelte-motion';
+  import PlayerDock from '$lib/components/app/PlayerDock.svelte';
+  import type { PlaybackQueueEntry } from '$lib/types';
+  import type { LyricLine } from '$lib/features/player/lyrics';
 
   interface Song {
     cid: string;
@@ -11,8 +11,8 @@
     coverUrl: string | null;
   }
 
-  type RepeatMode = "all" | "one";
-  type SongDownloadState = "idle" | "creating" | "queued" | "running";
+  type RepeatMode = 'all' | 'one';
+  type SongDownloadState = 'idle' | 'creating' | 'queued' | 'running';
   type MotionTarget = Record<string, string | number>;
 
   interface Props {
@@ -48,7 +48,7 @@
     onPlayQueueEntry: (
       entry: PlaybackQueueEntry,
       order: PlaybackQueueEntry[],
-      index: number,
+      index: number
     ) => void | Promise<void>;
   }
 
@@ -60,7 +60,7 @@
     const transition: any = {
       duration: props.reducedMotion ? 0 : duration,
       delay: props.reducedMotion ? 0 : delay,
-      ease: "easeOut" as const,
+      ease: 'easeOut' as const,
     };
 
     return transition;
@@ -70,16 +70,20 @@
     return { opacity };
   }
 
-  function axisEnter(axis: "x" | "y", offset: number): MotionTarget {
-    return props.reducedMotion ? { opacity: 1 } : { opacity: 0, [axis]: offset };
+  function axisEnter(axis: 'x' | 'y', offset: number): MotionTarget {
+    return props.reducedMotion
+      ? { opacity: 1 }
+      : { opacity: 0, [axis]: offset };
   }
 
-  function axisAnimate(axis: "x" | "y"): MotionTarget {
+  function axisAnimate(axis: 'x' | 'y'): MotionTarget {
     return { opacity: 1, [axis]: 0 };
   }
 
-  function axisExit(axis: "x" | "y", offset: number): MotionTarget {
-    return props.reducedMotion ? { opacity: 0 } : { opacity: 0, [axis]: offset };
+  function axisExit(axis: 'x' | 'y', offset: number): MotionTarget {
+    return props.reducedMotion
+      ? { opacity: 0 }
+      : { opacity: 0, [axis]: offset };
   }
 </script>
 
@@ -87,18 +91,18 @@
   {#if props.song}
     <motion.div
       key="player-dock"
-      initial={axisEnter("y", 18)}
-      animate={axisAnimate("y")}
+      initial={axisEnter('y', 18)}
+      animate={axisAnimate('y')}
       exit={fadeExit()}
       transition={motionTransition(PLAYER_DOCK_DURATION)}
     >
       <div
         class="player-dock-stack"
         data-panel={props.lyricsOpen
-          ? "lyrics"
+          ? 'lyrics'
           : props.playlistOpen
-            ? "playlist"
-            : "none"}
+            ? 'playlist'
+            : 'none'}
       >
         <AnimatePresence initial={false}>
           {#if props.lyricsOpen}
@@ -106,9 +110,9 @@
               key="player-lyrics"
               class="player-flyout"
               data-panel="lyrics"
-              initial={axisEnter("y", 12)}
-              animate={axisAnimate("y")}
-              exit={axisExit("y", 8)}
+              initial={axisEnter('y', 12)}
+              animate={axisAnimate('y')}
+              exit={axisExit('y', 8)}
               transition={motionTransition(0.18)}
             >
               <div class="player-flyout-header">
@@ -119,7 +123,7 @@
                 <span class="player-flyout-count"
                   >{props.lyricsLines.length > 0
                     ? `${props.lyricsLines.length} 行`
-                    : "歌词"}</span
+                    : '歌词'}</span
                 >
               </div>
 
@@ -131,7 +135,7 @@
                 <div class="player-lyrics-list">
                   {#each props.lyricsLines as line, index (line.id)}
                     <p
-                      class={`player-lyric-line${index === props.activeLyricIndex ? " active" : ""}`}
+                      class={`player-lyric-line${index === props.activeLyricIndex ? ' active' : ''}`}
                     >
                       {line.text}
                     </p>
@@ -146,9 +150,9 @@
               key="player-playlist"
               class="player-flyout"
               data-panel="playlist"
-              initial={axisEnter("y", 12)}
-              animate={axisAnimate("y")}
-              exit={axisExit("y", 8)}
+              initial={axisEnter('y', 12)}
+              animate={axisAnimate('y')}
+              exit={axisExit('y', 8)}
               transition={motionTransition(0.18)}
             >
               <div class="player-flyout-header">
@@ -156,7 +160,9 @@
                   <p class="player-flyout-eyebrow">播放列表</p>
                   <h3 class="player-flyout-title">当前队列</h3>
                 </div>
-                <span class="player-flyout-count">{props.playbackOrder.length} 首</span>
+                <span class="player-flyout-count"
+                  >{props.playbackOrder.length} 首</span
+                >
               </div>
 
               {#if props.playbackOrder.length > 0}
@@ -164,15 +170,23 @@
                   {#each props.playbackOrder as entry, index (entry.cid)}
                     <button
                       type="button"
-                      class={`player-playlist-item${entry.cid === props.song?.cid ? " active" : ""}`}
+                      class={`player-playlist-item${entry.cid === props.song?.cid ? ' active' : ''}`}
                       onclick={() => {
-                        void props.onPlayQueueEntry(entry, props.playbackOrder, index);
+                        void props.onPlayQueueEntry(
+                          entry,
+                          props.playbackOrder,
+                          index
+                        );
                       }}
                     >
-                      <span class="player-playlist-index">{String(index + 1).padStart(2, "0")}</span>
+                      <span class="player-playlist-index"
+                        >{String(index + 1).padStart(2, '0')}</span
+                      >
                       <span class="player-playlist-meta">
                         <span class="player-playlist-name">{entry.name}</span>
-                        <span class="player-playlist-artists">{entry.artists.join(" · ")}</span>
+                        <span class="player-playlist-artists"
+                          >{entry.artists.join(' · ')}</span
+                        >
                       </span>
                     </button>
                   {/each}

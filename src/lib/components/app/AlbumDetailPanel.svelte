@@ -1,10 +1,13 @@
 <script lang="ts">
-  import { motion } from "@humanspeak/svelte-motion";
-  import SongRow from "$lib/components/SongRow.svelte";
-  import { getDownloadBadgeLabel, shouldShowDownloadBadge } from "$lib/downloadBadge";
-  import type { AlbumDetail, SongEntry } from "$lib/types";
+  import { motion } from '@humanspeak/svelte-motion';
+  import SongRow from '$lib/components/SongRow.svelte';
+  import {
+    getDownloadBadgeLabel,
+    shouldShowDownloadBadge,
+  } from '$lib/downloadBadge';
+  import type { AlbumDetail, SongEntry } from '$lib/types';
 
-  type SongDownloadState = "idle" | "creating" | "queued" | "running";
+  type SongDownloadState = 'idle' | 'creating' | 'queued' | 'running';
   type MotionTarget = Record<string, string | number>;
 
   interface Props {
@@ -44,42 +47,44 @@
     () =>
       ({
         duration: props.reducedMotion ? 0 : 0.16,
-        ease: "easeOut",
-      }) as const,
+        ease: 'easeOut',
+      }) as const
   );
 
   const selectedSongCount = $derived.by(() => props.selectedSongCids.length);
   const selectedSongsLabel = $derived.by(() => {
-    if (selectedSongCount === 0) return "未选择歌曲";
-    if (selectedSongCount === 1) return "已选择 1 首";
+    if (selectedSongCount === 0) return '未选择歌曲';
+    if (selectedSongCount === 1) return '已选择 1 首';
     return `已选择 ${selectedSongCount} 首`;
   });
   const isAlbumDownloadCreating = $derived.by(
-    () => props.downloadingAlbumCid === props.album.cid,
+    () => props.downloadingAlbumCid === props.album.cid
   );
-  const hasAlbumDownloadJob = $derived.by(() => props.hasAlbumDownloadJob(props.album.cid));
+  const hasAlbumDownloadJob = $derived.by(() =>
+    props.hasAlbumDownloadJob(props.album.cid)
+  );
   const isAlbumDownloadDisabled = $derived.by(
-    () => isAlbumDownloadCreating || hasAlbumDownloadJob,
+    () => isAlbumDownloadCreating || hasAlbumDownloadJob
   );
   const isAllSongsSelected = $derived.by(
-    () => selectedSongCount === props.album.songs.length,
+    () => selectedSongCount === props.album.songs.length
   );
   const canInvertSelection = $derived.by(() => props.album.songs.length > 0);
-  const isSelectionCreating = $derived.by(
-    () => props.isCurrentSelectionCreating(props.selectedSongCids),
+  const isSelectionCreating = $derived.by(() =>
+    props.isCurrentSelectionCreating(props.selectedSongCids)
   );
-  const hasCurrentSelectionJob = $derived.by(
-    () => props.hasCurrentSelectionJob(props.selectedSongCids),
+  const hasCurrentSelectionJob = $derived.by(() =>
+    props.hasCurrentSelectionJob(props.selectedSongCids)
   );
-  const isSelectionDownloadDisabled = $derived.by(
-    () => props.isSelectionDownloadDisabled(props.selectedSongCids),
+  const isSelectionDownloadDisabled = $derived.by(() =>
+    props.isSelectionDownloadDisabled(props.selectedSongCids)
   );
 
   function motionTransition(duration: number, delay = 0): any {
     const transition: any = {
       duration: props.reducedMotion ? 0 : duration,
       delay: props.reducedMotion ? 0 : delay,
-      ease: "easeOut" as const,
+      ease: 'easeOut' as const,
     };
 
     return transition;
@@ -89,51 +94,55 @@
     return { opacity };
   }
 
-  function axisEnter(axis: "x" | "y", offset: number): MotionTarget {
-    return props.reducedMotion ? { opacity: 1 } : { opacity: 0, [axis]: offset };
+  function axisEnter(axis: 'x' | 'y', offset: number): MotionTarget {
+    return props.reducedMotion
+      ? { opacity: 1 }
+      : { opacity: 0, [axis]: offset };
   }
 
-  function axisAnimate(axis: "x" | "y"): MotionTarget {
+  function axisAnimate(axis: 'x' | 'y'): MotionTarget {
     return { opacity: 1, [axis]: 0 };
   }
 
-  function axisExit(axis: "x" | "y", offset: number): MotionTarget {
-    return props.reducedMotion ? { opacity: 0 } : { opacity: 0, [axis]: offset };
+  function axisExit(axis: 'x' | 'y', offset: number): MotionTarget {
+    return props.reducedMotion
+      ? { opacity: 0 }
+      : { opacity: 0, [axis]: offset };
   }
 
   function appButtonAnimate(primary = false, disabled = false): MotionTarget {
     return primary
       ? {
-          backgroundColor: disabled ? "var(--bg-tertiary)" : "var(--accent)",
-          color: disabled ? "var(--text-tertiary)" : "#ffffff",
+          backgroundColor: disabled ? 'var(--bg-tertiary)' : 'var(--accent)',
+          color: disabled ? 'var(--text-tertiary)' : '#ffffff',
           boxShadow: disabled
-            ? "0 0 0 rgba(var(--accent-rgb), 0)"
-            : "0 10px 24px rgba(var(--accent-rgb), 0.16)",
+            ? '0 0 0 rgba(var(--accent-rgb), 0)'
+            : '0 10px 24px rgba(var(--accent-rgb), 0.16)',
           opacity: disabled ? 0.72 : 1,
         }
       : {
-          backgroundColor: "var(--bg-tertiary)",
-          color: "var(--text-primary)",
-          boxShadow: "0 0 0 rgba(var(--accent-rgb), 0)",
+          backgroundColor: 'var(--bg-tertiary)',
+          color: 'var(--text-primary)',
+          boxShadow: '0 0 0 rgba(var(--accent-rgb), 0)',
           opacity: disabled ? 0.42 : 1,
         };
   }
 
   function appButtonHover(
     primary = false,
-    disabled = false,
+    disabled = false
   ): MotionTarget | undefined {
     if (disabled) return undefined;
 
     return primary
       ? {
-          backgroundColor: "var(--accent-hover)",
-          boxShadow: "0 10px 24px rgba(var(--accent-rgb), 0.2)",
+          backgroundColor: 'var(--accent-hover)',
+          boxShadow: '0 10px 24px rgba(var(--accent-rgb), 0.2)',
           ...(props.reducedMotion ? {} : { y: -1 }),
         }
       : {
-          backgroundColor: "var(--hover-bg-elevated)",
-          boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
+          backgroundColor: 'var(--hover-bg-elevated)',
+          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
           ...(props.reducedMotion ? {} : { y: -1 }),
         };
   }
@@ -149,9 +158,9 @@
   <div class="album-hero">
     <motion.div
       class="album-hero-info"
-      initial={axisEnter("y", 14)}
-      animate={axisAnimate("y")}
-      exit={axisExit("y", 8)}
+      initial={axisEnter('y', 14)}
+      animate={axisAnimate('y')}
+      exit={axisExit('y', 8)}
       transition={motionTransition(HERO_DURATION, HERO_DELAY)}
     >
       {#if props.album.belong}
@@ -159,7 +168,7 @@
       {/if}
       <h1 class="album-hero-title">{props.album.name}</h1>
       {#if props.album.artists && props.album.artists.length > 0}
-        <p class="album-hero-artists">{props.album.artists.join(", ")}</p>
+        <p class="album-hero-artists">{props.album.artists.join(', ')}</p>
       {/if}
       {#if props.album.intro}
         <p class="album-hero-intro">{props.album.intro}</p>
@@ -202,7 +211,7 @@
             : { y: 0, scale: 0.98, opacity: 0.94 }}
           transition={interactiveTransition}
         >
-          {props.selectionModeEnabled ? "取消多选" : "多选下载"}
+          {props.selectionModeEnabled ? '取消多选' : '多选下载'}
         </motion.button>
         {#if props.selectionModeEnabled}
           <motion.button
@@ -270,8 +279,8 @@
   </div>
   <motion.div
     class="song-list"
-    initial={axisEnter("y", 10)}
-    animate={axisAnimate("y")}
+    initial={axisEnter('y', 10)}
+    animate={axisAnimate('y')}
     exit={fadeExit()}
     transition={motionTransition(LIST_DURATION, LIST_DELAY)}
   >

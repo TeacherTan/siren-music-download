@@ -1,5 +1,5 @@
 <script lang="ts">
-  import AudioPlayer from "$lib/components/AudioPlayer.svelte";
+  import AudioPlayer from '$lib/components/AudioPlayer.svelte';
 
   interface Song {
     cid: string;
@@ -8,8 +8,8 @@
     coverUrl: string | null;
   }
 
-  type RepeatMode = "all" | "one";
-  type SongDownloadState = "idle" | "creating" | "queued" | "running";
+  type RepeatMode = 'all' | 'one';
+  type SongDownloadState = 'idle' | 'creating' | 'queued' | 'running';
 
   interface Props {
     song: Song | null;
@@ -42,7 +42,9 @@
 </script>
 
 <div class="pointer-events-none absolute inset-x-0 bottom-4 z-[140] px-6">
-  <div class="pointer-events-auto mx-auto max-w-[760px] rounded-full border border-white/50 bg-[var(--surface-dock)] p-2 shadow-[0_18px_40px_rgba(15,23,42,0.18)] backdrop-blur-xl">
+  <div
+    class="pointer-events-auto mx-auto max-w-[760px] rounded-full border border-white/50 bg-[var(--surface-dock)] p-2 shadow-[0_18px_40px_rgba(15,23,42,0.18)] backdrop-blur-xl"
+  >
     <AudioPlayer
       song={props.song}
       isPlaying={props.isPlaying}

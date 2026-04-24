@@ -1,4 +1,4 @@
-import type { Album, AlbumDetail } from "$lib/types";
+import type { Album, AlbumDetail } from '$lib/types';
 
 let albums = $state<Album[]>([]);
 let selectedAlbum = $state<AlbumDetail | null>(null);

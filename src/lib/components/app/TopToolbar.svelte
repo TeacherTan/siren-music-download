@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { toolbarIconButton } from "$lib/design/variants";
+  import { Button } from '$lib/components/ui/button/index.js';
+  import { toolbarIconButton } from '$lib/design/variants';
 
   interface Props {
     activeDownloadCount: number;
@@ -24,7 +24,9 @@
 </script>
 
 <div class="top-actions">
-  <div class="flex items-center gap-2 rounded-full border border-white/50 bg-white/[0.62] p-2 shadow-[0_16px_36px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+  <div
+    class="flex items-center gap-2 rounded-full border border-white/50 bg-white/[0.62] p-2 shadow-[0_16px_36px_rgba(15,23,42,0.12)] backdrop-blur-xl"
+  >
     <Button
       size="icon-sm"
       variant="ghost"

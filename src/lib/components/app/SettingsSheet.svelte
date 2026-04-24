@@ -1,21 +1,21 @@
 <script lang="ts">
-  import * as Sheet from "$lib/components/ui/sheet/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Switch } from "$lib/components/ui/switch/index.js";
+  import * as Sheet from '$lib/components/ui/sheet/index.js';
+  import { Button } from '$lib/components/ui/button/index.js';
+  import { Switch } from '$lib/components/ui/switch/index.js';
   import {
     clearAudioCache,
     getLogFileStatus,
     listLogRecords,
     selectDirectory,
     sendTestNotification,
-  } from "$lib/settingsApi";
+  } from '$lib/settingsApi';
   import type {
     LogFileKind,
     LogFileStatus,
     LogLevel,
     LogViewerRecord,
     OutputFormat,
-  } from "$lib/types";
+  } from '$lib/types';
 
   interface Props {
     open?: boolean;
@@ -33,23 +33,23 @@
 
   let {
     open = $bindable(false),
-    format = $bindable<OutputFormat>("flac"),
-    outputDir = $bindable(""),
+    format = $bindable<OutputFormat>('flac'),
+    outputDir = $bindable(''),
     downloadLyrics = $bindable(true),
     notifyOnDownloadComplete = $bindable(true),
     notifyOnPlaybackChange = $bindable(true),
-    logLevel = $bindable<LogLevel>("error"),
+    logLevel = $bindable<LogLevel>('error'),
     logRefreshToken = 0,
     notifyInfo,
     notifyError,
     onOutputDirChange,
   }: Props = $props();
 
-  let logFileKind = $state<LogFileKind>("session");
+  let logFileKind = $state<LogFileKind>('session');
   let logRecords = $state<LogViewerRecord[]>([]);
   let logFileStatus = $state<LogFileStatus | null>(null);
   let logViewerLoading = $state(false);
-  let logViewerError = $state("");
+  let logViewerError = $state('');
   let logRequestSeq = 0;
   let isSendingTestNotification = $state(false);
   let isClearingAudioCache = $state(false);
@@ -58,7 +58,7 @@
   async function refreshLogs(kind = logFileKind) {
     const requestSeq = ++logRequestSeq;
     logViewerLoading = true;
-    logViewerError = "";
+    logViewerError = '';
     try {
       const [page, status] = await Promise.all([
         listLogRecords({ kind, limit: 100 }),
@@ -94,7 +94,7 @@
     const saved = await onOutputDirChange(dir);
     if (!saved) {
       outputDir = currentOutputDir;
-      notifyError("保存下载目录失败，已恢复为之前的设置。");
+      notifyError('保存下载目录失败，已恢复为之前的设置。');
     }
   }
 
@@ -106,11 +106,11 @@
       notifyInfo(
         removed > 0
           ? `已清除 ${removed} 个音频缓存文件`
-          : "当前没有可清除的音频缓存",
+          : '当前没有可清除的音频缓存'
       );
     } catch (error) {
       notifyError(
-        `清除音频缓存失败：${error instanceof Error ? error.message : String(error)}`,
+        `清除音频缓存失败：${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       isClearingAudioCache = false;
@@ -122,10 +122,10 @@
     isSendingTestNotification = true;
     try {
       await sendTestNotification();
-      notifyInfo("测试通知已请求发送，请观察系统通知中心或终端日志。");
+      notifyInfo('测试通知已请求发送，请观察系统通知中心或终端日志。');
     } catch (error) {
       notifyError(
-        `发送测试通知失败：${error instanceof Error ? error.message : String(error)}`,
+        `发送测试通知失败：${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       isSendingTestNotification = false;
@@ -156,11 +156,12 @@
 
     void refreshLogs(logFileKind);
   });
-
 </script>
 
 <Sheet.Root bind:open>
-  <Sheet.Content class="w-[340px] border-white/50 bg-[var(--surface-sheet)] text-[var(--text-primary)] backdrop-blur-xl">
+  <Sheet.Content
+    class="w-[340px] border-white/50 bg-[var(--surface-sheet)] text-[var(--text-primary)] backdrop-blur-xl"
+  >
     <Sheet.Header>
       <Sheet.Title>下载设置</Sheet.Title>
       <Sheet.Description>音频格式、通知和缓存管理</Sheet.Description>
@@ -168,7 +169,9 @@
 
     <div class="space-y-6 py-2">
       <div class="space-y-2">
-        <label class="text-sm text-[var(--text-secondary)]" for="format-select">输出格式</label>
+        <label class="text-sm text-[var(--text-secondary)]" for="format-select"
+          >输出格式</label
+        >
         <select
           id="format-select"
           class="w-full rounded-2xl border border-white/50 bg-white/[0.40] px-3 py-2 text-sm outline-none"
@@ -181,7 +184,10 @@
       </div>
 
       <div class="space-y-2">
-        <label class="text-sm text-[var(--text-secondary)]" for="log-level-select">持久化日志等级</label>
+        <label
+          class="text-sm text-[var(--text-secondary)]"
+          for="log-level-select">持久化日志等级</label
+        >
         <select
           id="log-level-select"
           class="w-full rounded-2xl border border-white/50 bg-white/[0.40] px-3 py-2 text-sm outline-none"
@@ -195,7 +201,9 @@
       </div>
 
       <div class="space-y-2">
-        <label class="text-sm text-[var(--text-secondary)]" for="output-dir">保存位置</label>
+        <label class="text-sm text-[var(--text-secondary)]" for="output-dir"
+          >保存位置</label
+        >
         <input
           id="output-dir"
           class="w-full rounded-2xl border border-white/50 bg-white/[0.35] px-3 py-2 text-sm outline-none"
@@ -207,11 +215,15 @@
         </Button>
       </div>
 
-      <div class="space-y-4 rounded-[22px] border border-white/[0.45] bg-white/[0.28] p-4">
+      <div
+        class="space-y-4 rounded-[22px] border border-white/[0.45] bg-white/[0.28] p-4"
+      >
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
             <p class="text-sm font-medium">歌词文件</p>
-            <p class="mt-1 text-xs text-[var(--text-secondary)]">有歌词时，在音频旁生成同名 `.lrc`。</p>
+            <p class="mt-1 text-xs text-[var(--text-secondary)]">
+              有歌词时，在音频旁生成同名 `.lrc`。
+            </p>
           </div>
           <Switch bind:checked={downloadLyrics} />
         </div>
@@ -229,14 +241,16 @@
             disabled={isSendingTestNotification}
             onclick={() => void handleSendTestNotification()}
           >
-            {isSendingTestNotification ? "正在发送..." : "发送测试通知"}
+            {isSendingTestNotification ? '正在发送...' : '发送测试通知'}
           </Button>
         </div>
 
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
             <p class="text-sm font-medium">下载完成通知</p>
-            <p class="mt-1 text-xs text-[var(--text-secondary)]">下载任务完成时显示通知。</p>
+            <p class="mt-1 text-xs text-[var(--text-secondary)]">
+              下载任务完成时显示通知。
+            </p>
           </div>
           <Switch bind:checked={notifyOnDownloadComplete} />
         </div>
@@ -244,16 +258,22 @@
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
             <p class="text-sm font-medium">播放切换通知</p>
-            <p class="mt-1 text-xs text-[var(--text-secondary)]">播放新歌曲时显示通知。</p>
+            <p class="mt-1 text-xs text-[var(--text-secondary)]">
+              播放新歌曲时显示通知。
+            </p>
           </div>
           <Switch bind:checked={notifyOnPlaybackChange} />
         </div>
       </div>
 
-      <div class="space-y-3 rounded-[22px] border border-white/45 bg-white/25 p-4">
+      <div
+        class="space-y-3 rounded-[22px] border border-white/45 bg-white/25 p-4"
+      >
         <div>
           <p class="text-sm font-medium">音乐缓存</p>
-          <p class="mt-1 text-xs text-[var(--text-secondary)]">播放时的音频缓存保存在系统缓存目录。</p>
+          <p class="mt-1 text-xs text-[var(--text-secondary)]">
+            播放时的音频缓存保存在系统缓存目录。
+          </p>
         </div>
         <Button
           class="w-full"
@@ -261,11 +281,13 @@
           disabled={isClearingAudioCache}
           onclick={() => void handleClearAudioCache()}
         >
-          {isClearingAudioCache ? "正在清除缓存..." : "清除音频缓存"}
+          {isClearingAudioCache ? '正在清除缓存...' : '清除音频缓存'}
         </Button>
       </div>
 
-      <div class="space-y-3 rounded-[22px] border border-white/45 bg-white/25 p-4">
+      <div
+        class="space-y-3 rounded-[22px] border border-white/45 bg-white/25 p-4"
+      >
         <div class="flex items-center justify-between gap-2">
           <div>
             <p class="text-sm font-medium">日志与诊断</p>
@@ -276,15 +298,15 @@
           <div class="flex gap-2">
             <Button
               size="sm"
-              variant={logFileKind === "session" ? "default" : "secondary"}
-              onclick={() => void refreshLogs("session")}
+              variant={logFileKind === 'session' ? 'default' : 'secondary'}
+              onclick={() => void refreshLogs('session')}
             >
               本次运行
             </Button>
             <Button
               size="sm"
-              variant={logFileKind === "persistent" ? "default" : "secondary"}
-              onclick={() => void refreshLogs("persistent")}
+              variant={logFileKind === 'persistent' ? 'default' : 'secondary'}
+              onclick={() => void refreshLogs('persistent')}
             >
               持久化
             </Button>
@@ -292,30 +314,47 @@
         </div>
 
         <p class="text-[11px] text-[var(--text-secondary)]">
-          session: {logFileStatus?.hasSessionLog ? "可用" : "暂无"} · persistent:
-          {logFileStatus?.hasPersistentLog ? "可用" : "暂无"}
+          session: {logFileStatus?.hasSessionLog ? '可用' : '暂无'} · persistent:
+          {logFileStatus?.hasPersistentLog ? '可用' : '暂无'}
         </p>
 
         {#if logViewerLoading}
-          <div class="rounded-2xl border border-white/[0.30] bg-white/[0.18] px-3 py-4 text-xs text-[var(--text-secondary)]">
+          <div
+            class="rounded-2xl border border-white/[0.30] bg-white/[0.18] px-3 py-4 text-xs text-[var(--text-secondary)]"
+          >
             正在加载日志…
           </div>
         {:else if logViewerError}
-          <div class="rounded-2xl border border-red-400/40 bg-red-500/[0.10] px-3 py-4 text-xs text-red-500/90">
+          <div
+            class="rounded-2xl border border-red-400/40 bg-red-500/[0.10] px-3 py-4 text-xs text-red-500/90"
+          >
             {logViewerError}
           </div>
         {:else if logRecords.length > 0}
-          <div class="max-h-[240px] space-y-2 overflow-y-auto rounded-2xl border border-white/[0.30] bg-white/[0.18] p-2">
+          <div
+            class="max-h-[240px] space-y-2 overflow-y-auto rounded-2xl border border-white/[0.30] bg-white/[0.18] p-2"
+          >
             {#each logRecords as record (record.id)}
-              <div class="rounded-xl border border-white/[0.25] bg-white/[0.16] px-3 py-2">
+              <div
+                class="rounded-xl border border-white/[0.25] bg-white/[0.16] px-3 py-2"
+              >
                 <div class="flex items-center justify-between gap-2">
-                  <span class="text-[11px] font-medium uppercase text-[var(--text-secondary)]">{record.level}</span>
-                  <span class="text-[11px] text-[var(--text-secondary)]">{record.ts}</span>
+                  <span
+                    class="text-[11px] font-medium uppercase text-[var(--text-secondary)]"
+                    >{record.level}</span
+                  >
+                  <span class="text-[11px] text-[var(--text-secondary)]"
+                    >{record.ts}</span
+                  >
                 </div>
                 <p class="mt-1 text-xs font-medium">{record.message}</p>
-                <p class="mt-1 text-[11px] text-[var(--text-secondary)]">{record.domain} · {record.code}</p>
+                <p class="mt-1 text-[11px] text-[var(--text-secondary)]">
+                  {record.domain} · {record.code}
+                </p>
                 {#if record.details}
-                  <p class="mt-1 whitespace-pre-wrap break-all text-[11px] text-[var(--text-secondary)]">
+                  <p
+                    class="mt-1 whitespace-pre-wrap break-all text-[11px] text-[var(--text-secondary)]"
+                  >
                     {record.details}
                   </p>
                 {/if}
@@ -323,7 +362,9 @@
             {/each}
           </div>
         {:else}
-          <div class="rounded-2xl border border-white/[0.30] bg-white/[0.18] px-3 py-4 text-xs text-[var(--text-secondary)]">
+          <div
+            class="rounded-2xl border border-white/[0.30] bg-white/[0.18] px-3 py-4 text-xs text-[var(--text-secondary)]"
+          >
             当前没有可显示的日志记录。
           </div>
         {/if}

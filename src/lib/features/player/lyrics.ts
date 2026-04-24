@@ -16,8 +16,8 @@ export function parseLyricText(source: string): LyricLine[] {
       ...rawLine.matchAll(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g),
     ];
     const text =
-      rawLine.replace(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g, "").trim() ||
-      "♪";
+      rawLine.replace(/\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g, '').trim() ||
+      '♪';
 
     if (!matches.length) {
       parsed.push({
@@ -31,8 +31,8 @@ export function parseLyricText(source: string): LyricLine[] {
     for (const match of matches) {
       const minutes = Number(match[1] ?? 0);
       const seconds = Number(match[2] ?? 0);
-      const fractionText = match[3] ?? "0";
-      const fraction = Number(`0.${fractionText.padEnd(3, "0")}`);
+      const fractionText = match[3] ?? '0';
+      const fraction = Number(`0.${fractionText.padEnd(3, '0')}`);
       parsed.push({
         id: `${minutes}:${seconds}:${fractionText}:${parsed.length}`,
         time: minutes * 60 + seconds + fraction,

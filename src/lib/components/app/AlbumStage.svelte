@@ -1,5 +1,5 @@
 <script lang="ts">
-  import MotionPulseBlock from "$lib/components/MotionPulseBlock.svelte";
+  import MotionPulseBlock from '$lib/components/MotionPulseBlock.svelte';
 
   interface Props {
     albumName?: string;
@@ -16,7 +16,7 @@
   }
 
   let {
-    albumName = "专辑",
+    albumName = '专辑',
     artworkUrl = null,
     loading = false,
     reducedMotion = false,
@@ -24,7 +24,7 @@
     mediaHeight,
     scrimOpacity,
     imageOpacity = 1,
-    imageTransform = "translateZ(0) scale(1)",
+    imageTransform = 'translateZ(0) scale(1)',
     solidifyOpacity = 0,
     element = $bindable<HTMLElement | null>(null),
   }: Props = $props();
@@ -33,7 +33,7 @@
 <div class="album-stage" bind:this={element} style={stageStyle}>
   <div class="album-stage-frame">
     <div
-      class={`album-stage-media${loading ? " album-stage-media-loading" : ""}`}
+      class={`album-stage-media${loading ? ' album-stage-media-loading' : ''}`}
       style:height={mediaHeight}
     >
       <div class="album-stage-media-content">

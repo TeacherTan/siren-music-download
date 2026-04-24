@@ -4,7 +4,7 @@ import type {
   LibrarySearchScope,
   LocalInventorySnapshot,
   SearchLibraryResponse,
-} from "$lib/types";
+} from '$lib/types';
 
 interface LibraryControllerDeps {
   delay: (ms: number) => Promise<void>;
@@ -13,7 +13,7 @@ interface LibraryControllerDeps {
   getAlbums: () => Promise<Album[]>;
   getAlbumDetail: (
     albumCid: string,
-    inventoryVersion: string | null,
+    inventoryVersion: string | null
   ) => Promise<AlbumDetail>;
   searchLibrary: (input: {
     query: string;
@@ -37,7 +37,7 @@ interface LoadAlbumsOptions {
 interface HandleInventoryStateChangedOptions {
   shouldDispose?: () => boolean;
   invalidateInventoryCaches: (
-    inventoryVersion: string | null | undefined,
+    inventoryVersion: string | null | undefined
   ) => Promise<void>;
   onSelectionInvalidated?: () => void;
 }
@@ -50,9 +50,9 @@ export function createLibraryController(deps: LibraryControllerDeps) {
   let selectedAlbumCid = $state<string | null>(null);
   let loadingAlbums = $state(false);
   let loadingDetail = $state(false);
-  let errorMsg = $state("");
-  let librarySearchQuery = $state("");
-  let librarySearchScope = $state<LibrarySearchScope>("all");
+  let errorMsg = $state('');
+  let librarySearchQuery = $state('');
+  let librarySearchScope = $state<LibrarySearchScope>('all');
   let librarySearchLoading = $state(false);
   let librarySearchResponse = $state<SearchLibraryResponse | null>(null);
   let pendingScrollToSongCid = $state<string | null>(null);
@@ -117,7 +117,7 @@ export function createLibraryController(deps: LibraryControllerDeps) {
         total: 0,
         query: trimmedQuery,
         scope,
-        indexState: "notReady",
+        indexState: 'notReady',
       };
       deps.notifyError(`搜索失败：${message}`);
     } finally {
@@ -155,7 +155,7 @@ export function createLibraryController(deps: LibraryControllerDeps) {
         return albums;
       }
       albums = albumList;
-      errorMsg = "";
+      errorMsg = '';
       return albumList;
     } catch (error) {
       if (!shouldDispose?.()) {
@@ -195,14 +195,14 @@ export function createLibraryController(deps: LibraryControllerDeps) {
     try {
       const detail = await deps.getAlbumDetail(
         album.cid,
-        localInventory?.inventoryVersion ?? null,
+        localInventory?.inventoryVersion ?? null
       );
       if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
       const artworkAspectRatio = await deps.preloadAlbumArtwork(detail);
       if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
       selectedAlbum = detail;
       deps.setAlbumStageAspectRatio(artworkAspectRatio);
-      errorMsg = "";
+      errorMsg = '';
       await options?.afterSelect?.();
       if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
     } catch (error) {
@@ -222,7 +222,7 @@ export function createLibraryController(deps: LibraryControllerDeps) {
 
   async function replaceAlbumsAndRefreshCurrentSelection(
     nextAlbums: Album[],
-    options?: SelectAlbumOptions,
+    options?: SelectAlbumOptions
   ) {
     const shouldDispose = options?.shouldDispose;
     if (shouldDispose?.()) {
@@ -235,7 +235,9 @@ export function createLibraryController(deps: LibraryControllerDeps) {
     }
 
     const currentAlbumCid = selectedAlbumCid;
-    const refreshedAlbum = nextAlbums.find((album) => album.cid === currentAlbumCid);
+    const refreshedAlbum = nextAlbums.find(
+      (album) => album.cid === currentAlbumCid
+    );
     if (!refreshedAlbum) {
       selectedAlbum = null;
       selectedAlbumCid = null;
@@ -256,7 +258,7 @@ export function createLibraryController(deps: LibraryControllerDeps) {
     try {
       const detail = await deps.getAlbumDetail(
         currentAlbumCid,
-        localInventory?.inventoryVersion ?? null,
+        localInventory?.inventoryVersion ?? null
       );
       if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
       const artworkAspectRatio = await deps.preloadAlbumArtwork(detail);
@@ -267,7 +269,7 @@ export function createLibraryController(deps: LibraryControllerDeps) {
     } catch (error) {
       if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
       deps.notifyError(
-        `刷新当前专辑失败：${error instanceof Error ? error.message : String(error)}`,
+        `刷新当前专辑失败：${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
@@ -277,7 +279,7 @@ export function createLibraryController(deps: LibraryControllerDeps) {
   }
 
   async function reloadAlbumsAndRefreshCurrentSelection(
-    options?: SelectAlbumOptions,
+    options?: SelectAlbumOptions
   ) {
     const nextAlbums = await loadAlbums({
       shouldDispose: options?.shouldDispose,
@@ -300,16 +302,17 @@ export function createLibraryController(deps: LibraryControllerDeps) {
 
   async function handleInventoryStateChanged(
     snapshot: LocalInventorySnapshot,
-    options: HandleInventoryStateChangedOptions,
+    options: HandleInventoryStateChangedOptions
   ) {
     const shouldDispose = options.shouldDispose;
     const previousVersion = localInventory?.inventoryVersion ?? null;
     const previousStatus = localInventory?.status ?? null;
     localInventory = snapshot;
     localInventoryVersionInitialized = true;
-    const inventoryVersionChanged = previousVersion !== snapshot.inventoryVersion;
+    const inventoryVersionChanged =
+      previousVersion !== snapshot.inventoryVersion;
     const scanJustCompleted =
-      snapshot.status === "completed" && previousStatus !== "completed";
+      snapshot.status === 'completed' && previousStatus !== 'completed';
 
     if (inventoryVersionChanged) {
       await options.invalidateInventoryCaches(previousVersion);
@@ -333,7 +336,7 @@ export function createLibraryController(deps: LibraryControllerDeps) {
     }
 
     const refreshedAlbum = refreshedAlbums.find(
-      (album) => album.cid === currentSelectedAlbumCid,
+      (album) => album.cid === currentSelectedAlbumCid
     );
     if (!refreshedAlbum) {
       selectedAlbum = null;
@@ -350,7 +353,7 @@ export function createLibraryController(deps: LibraryControllerDeps) {
     try {
       const detail = await deps.getAlbumDetail(
         currentSelectedAlbumCid,
-        snapshot.inventoryVersion,
+        snapshot.inventoryVersion
       );
       if (
         shouldDispose?.() ||

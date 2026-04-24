@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+src-tauri/target/
+.svelte-kit/
+build/
+.claude/
+bun.lock
+Cargo.lock
+package-lock.json
+pnpm-lock.yaml
+yarn.lock

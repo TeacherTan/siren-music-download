@@ -7,11 +7,16 @@ export const DEFAULT_THEME_PALETTE: ThemePalette = {
   accentHoverRgb: [255, 59, 92],
 };
 
-export function applyThemePalette(palette: ThemePalette = DEFAULT_THEME_PALETTE): void {
+export function applyThemePalette(
+  palette: ThemePalette = DEFAULT_THEME_PALETTE
+): void {
   const root = document.documentElement;
 
   root.style.setProperty('--accent', palette.accentHex);
   root.style.setProperty('--accent-hover', palette.accentHoverHex);
   root.style.setProperty('--accent-rgb', palette.accentRgb.join(', '));
-  root.style.setProperty('--accent-hover-rgb', palette.accentHoverRgb.join(', '));
+  root.style.setProperty(
+    '--accent-hover-rgb',
+    palette.accentHoverRgb.join(', ')
+  );
 }

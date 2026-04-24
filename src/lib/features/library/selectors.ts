@@ -1,11 +1,13 @@
-import type { AlbumDetail, PlaybackQueueEntry } from "$lib/types";
+import type { AlbumDetail, PlaybackQueueEntry } from '$lib/types';
 
-export function getSelectedAlbumCoverUrl(album: AlbumDetail | null): string | null {
+export function getSelectedAlbumCoverUrl(
+  album: AlbumDetail | null
+): string | null {
   return album?.coverUrl ?? album?.coverDeUrl ?? null;
 }
 
 export function buildAlbumPlaybackEntries(
-  album: AlbumDetail | null,
+  album: AlbumDetail | null
 ): PlaybackQueueEntry[] {
   if (!album) return [];
 

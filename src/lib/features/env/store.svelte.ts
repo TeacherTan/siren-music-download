@@ -16,22 +16,22 @@ function updateViewportHeight() {
 }
 
 function init() {
-  if (initialized || typeof window === "undefined") return;
+  if (initialized || typeof window === 'undefined') return;
   initialized = true;
 
   isMacOS =
     /Mac|iPhone|iPad|iPod/.test(navigator.platform) ||
-    navigator.userAgent.includes("Mac");
+    navigator.userAgent.includes('Mac');
 
-  mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   changeHandler = () => updateReducedMotionPreference();
   resizeHandler = () => updateViewportHeight();
 
   updateReducedMotionPreference();
   updateViewportHeight();
 
-  mediaQuery.addEventListener("change", changeHandler);
-  window.addEventListener("resize", resizeHandler, { passive: true });
+  mediaQuery.addEventListener('change', changeHandler);
+  window.addEventListener('resize', resizeHandler, { passive: true });
 }
 
 function dispose() {
@@ -39,11 +39,11 @@ function dispose() {
   initialized = false;
 
   if (mediaQuery && changeHandler) {
-    mediaQuery.removeEventListener("change", changeHandler);
+    mediaQuery.removeEventListener('change', changeHandler);
   }
 
   if (resizeHandler) {
-    window.removeEventListener("resize", resizeHandler);
+    window.removeEventListener('resize', resizeHandler);
   }
 
   mediaQuery = null;

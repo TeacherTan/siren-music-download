@@ -1,4 +1,4 @@
-import type { PlayerState } from "$lib/types";
+import type { PlayerState } from '$lib/types';
 
 let playerState = $state<PlayerState | null>(null);
 let initialized = false;

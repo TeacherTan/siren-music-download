@@ -1,13 +1,7 @@
 <script lang="ts">
-  import { tick } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
-  import { AnimatePresence, motion } from "@humanspeak/svelte-motion";
-  import { OverlayScrollbarsComponent } from "overlayscrollbars-svelte";
-  import type {
-    EventListeners,
-    OverlayScrollbars,
-    PartialOptions,
-  } from "overlayscrollbars";
+  import { tick } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
+  import type { PartialOptions } from 'overlayscrollbars';
   import {
     getAlbums,
     getAlbumDetail,
@@ -32,13 +26,13 @@
     setPreferences,
     getLocalInventorySnapshot,
     searchLibrary,
-  } from "$lib/api";
+  } from '$lib/api';
   import {
     clearCache,
     createInventoryCacheTag,
     invalidateByTag,
     warmCacheManager,
-  } from "$lib/cache";
+  } from '$lib/cache';
   import type {
     Album,
     AlbumDetail,
@@ -51,54 +45,44 @@
     DownloadTaskProgressEvent,
     CreateDownloadJobRequest,
     DownloadTaskSnapshot,
-    AppPreferences,
     LocalInventorySnapshot,
     AppErrorEvent,
     LogLevel,
     LibrarySearchScope,
     SearchLibraryResultItem,
-  } from "$lib/types";
-  import { applyThemePalette, DEFAULT_THEME_PALETTE } from "$lib/theme";
-  import { envStore } from "$lib/features/env/store.svelte";
-  import { shellStore } from "$lib/features/shell/store.svelte";
-  import { createLibraryController } from "$lib/features/library/controller.svelte";
-  import { createPlayerController } from "$lib/features/player/controller.svelte";
-  import { createDownloadController } from "$lib/features/download/controller.svelte";
-  import { clamp, preloadImage } from "$lib/features/library/helpers";
-  import { buildAlbumPlaybackEntries, getSelectedAlbumCoverUrl } from "$lib/features/library/selectors";
-  import { toast } from "svelte-sonner";
-  import MotionSpinner from "$lib/components/MotionSpinner.svelte";
-  import MotionPulseBlock from "$lib/components/MotionPulseBlock.svelte";
-  import TopToolbar from "$lib/components/app/TopToolbar.svelte";
-  import StatusToastHost from "$lib/components/app/StatusToastHost.svelte";
-  import AlbumSidebar from "$lib/components/app/AlbumSidebar.svelte";
-  import AlbumWorkspace from "$lib/components/app/AlbumWorkspace.svelte";
-  import AlbumStage from "$lib/components/app/AlbumStage.svelte";
-  import AlbumDetailSkeleton from "$lib/components/app/AlbumDetailSkeleton.svelte";
-  import AlbumDetailPanel from "$lib/components/app/AlbumDetailPanel.svelte";
-  import PlayerFlyoutStack from "$lib/components/app/PlayerFlyoutStack.svelte";
+  } from '$lib/types';
+  import { applyThemePalette, DEFAULT_THEME_PALETTE } from '$lib/theme';
+  import { envStore } from '$lib/features/env/store.svelte';
+  import { shellStore } from '$lib/features/shell/store.svelte';
+  import { createSettingsController } from '$lib/features/shell/settings.svelte';
+  import { createAlbumStageMotionController } from '$lib/features/shell/albumStageMotion.svelte';
+  import { createLibraryController } from '$lib/features/library/controller.svelte';
+  import { createPlayerController } from '$lib/features/player/controller.svelte';
+  import { createDownloadController } from '$lib/features/download/controller.svelte';
+  import { preloadImage } from '$lib/features/library/helpers';
+  import {
+    buildAlbumPlaybackEntries,
+    getSelectedAlbumCoverUrl,
+  } from '$lib/features/library/selectors';
+  import { toast } from 'svelte-sonner';
+  import TopToolbar from '$lib/components/app/TopToolbar.svelte';
+  import StatusToastHost from '$lib/components/app/StatusToastHost.svelte';
+  import AlbumSidebarContainer from '$lib/components/app/AlbumSidebarContainer.svelte';
+  import AlbumWorkspace from '$lib/components/app/AlbumWorkspace.svelte';
+  import AlbumWorkspaceContent from '$lib/components/app/AlbumWorkspaceContent.svelte';
+  import PlayerFlyoutStack from '$lib/components/app/PlayerFlyoutStack.svelte';
+  import AppSideSheets from '$lib/components/app/AppSideSheets.svelte';
 
   // Minimum display time (ms) to prevent animation flash on fast loads
   const MIN_DISPLAY_MS = 260;
   const DETAIL_SKELETON_DELAY_MS = 140;
-  const PANEL_DURATION = 0.18;
-  const HERO_DURATION = 0.22;
-  const HERO_DELAY = 0.03;
-  const LIST_DURATION = 0.2;
-  const LIST_DELAY = 0.07;
-  const CONTENT_MASK_DURATION = 0.14;
   const OVERLAY_DURATION = 0.16;
   const SHEET_DURATION = 0.22;
-  const DEFAULT_ALBUM_STAGE_ASPECT_RATIO = 16 / 9;
-  const ALBUM_STAGE_BASE_VIEWPORT_RATIO = 1 / 3;
-  const ALBUM_STAGE_COLLAPSE_SCROLL_RANGE = 260;
-  const ALBUM_STAGE_SOLIDIFY_SCROLL_RANGE = 220;
 
-  const delay = (ms: number) =>
-    new Promise((resolve) => setTimeout(resolve, ms));
-
-  type SettingsSheetComponent = typeof import("$lib/components/app/SettingsSheet.svelte").default;
-  type DownloadTasksSheetComponent = typeof import("$lib/components/app/DownloadTasksSheet.svelte").default;
+  const delay = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
 
   const libraryController = createLibraryController({
     delay,
@@ -118,7 +102,9 @@
     },
     pausePlayback,
     resumePlayback,
-    seekCurrentPlayback,
+    seekCurrentPlayback: async (positionSecs) => {
+      await seekCurrentPlayback(positionSecs);
+    },
     getSongLyrics,
     notifyError,
   });
@@ -131,41 +117,65 @@
     retryDownloadTask,
     clearDownloadHistory,
     openDownloadPanel: async (resetFilters = false) => {
-      if (resetFilters) {
-        downloadController.resetFilters();
-      }
-
-      const loaded = await ensureDownloadTasksSheetLoaded();
-      if (!loaded) {
-        return;
-      }
-
-      downloadPanelOpen = true;
-      settingsOpen = false;
+      await shellStore.openDownloads({
+        notifyError,
+        beforeOpen: resetFilters
+          ? () => {
+              downloadController.resetFilters();
+            }
+          : undefined,
+      });
     },
     getDownloadOptions: () => ({
-      outputDir,
-      format,
-      downloadLyrics,
+      outputDir: settingsState.outputDir,
+      format: settingsState.format,
+      downloadLyrics: settingsState.downloadLyrics,
     }),
     notifyInfo,
     notifyError,
   });
 
-  let outputDir = $state("");
-  let format = $state<OutputFormat>("flac");
+  const settingsController = createSettingsController({
+    getPreferences,
+    setPreferences,
+    notifyError,
+  });
+
+  const albumStageMotionController = createAlbumStageMotionController({
+    getReducedMotion: () => envStore.prefersReducedMotion,
+    getViewportHeight: () => envStore.viewportHeight,
+    getLoadingDetail: () => libraryController.loadingDetail,
+  });
+
   let selectedSongCids = $state<string[]>([]);
   let selectionModeEnabled = $state(false);
-  // Download job system state
-  let downloadPanelOpen = $state(false);
-  let SettingsSheetView = $state<SettingsSheetComponent | null>(null);
-  let DownloadTasksSheetView = $state<DownloadTasksSheetComponent | null>(null);
-  let settingsSheetLoader = $state<Promise<SettingsSheetComponent> | null>(null);
-  let downloadTasksSheetLoader = $state<Promise<DownloadTasksSheetComponent> | null>(null);
   let themeRequestSeq = 0;
   let artworkRequestSeq = 0;
   let playerStateInitSeq = 0;
   let playerStateHydratedFromEvent = false;
+  const settingsOpen = $derived(shellStore.settingsOpen);
+  const downloadPanelOpen = $derived(shellStore.downloadPanelOpen);
+  const SettingsSheetView = $derived(shellStore.SettingsSheetView);
+  const DownloadTasksSheetView = $derived(shellStore.DownloadTasksSheetView);
+  const contentScrollbarEvents = $derived(
+    albumStageMotionController.contentScrollbarEvents
+  );
+  const albumStageStyle = $derived(albumStageMotionController.albumStageStyle);
+  const albumStageMediaHeight = $derived(
+    albumStageMotionController.albumStageMediaHeight
+  );
+  const albumStageScrimOpacity = $derived(
+    albumStageMotionController.albumStageScrimOpacity
+  );
+  const albumStageImageOpacity = $derived(
+    albumStageMotionController.albumStageImageOpacity
+  );
+  const albumStageImageTransform = $derived(
+    albumStageMotionController.albumStageImageTransform
+  );
+  const albumStageSolidifyOpacity = $derived(
+    albumStageMotionController.albumStageSolidifyOpacity
+  );
   const prefersReducedMotion = $derived(envStore.prefersReducedMotion);
   const albums = $derived(libraryController.albums);
   const selectedAlbum = $derived(libraryController.selectedAlbum);
@@ -176,8 +186,12 @@
   const librarySearchQuery = $derived(libraryController.librarySearchQuery);
   const librarySearchScope = $derived(libraryController.librarySearchScope);
   const librarySearchLoading = $derived(libraryController.librarySearchLoading);
-  const librarySearchResponse = $derived(libraryController.librarySearchResponse);
-  const pendingScrollToSongCid = $derived(libraryController.pendingScrollToSongCid);
+  const librarySearchResponse = $derived(
+    libraryController.librarySearchResponse
+  );
+  const pendingScrollToSongCid = $derived(
+    libraryController.pendingScrollToSongCid
+  );
   const showDetailSkeleton = $derived(libraryController.showDetailSkeleton);
   const albumRequestSeq = $derived(libraryController.albumRequestSeq);
   const currentSong = $derived(playerController.currentSong);
@@ -199,18 +213,40 @@
   const activeDownloadCount = $derived(downloadController.activeDownloadCount);
   const filteredDownloadJobs = $derived(downloadController.filteredJobs);
   const hasDownloadHistory = $derived(downloadController.hasDownloadHistory);
-  let contentEl = $state<HTMLElement | null>(null);
-  let albumStageEl = $state<HTMLElement | null>(null);
-  let selectedAlbumArtworkUrl = $state<string | null>(null);
+  const contentEl = $derived(albumStageMotionController.contentElement);
   const isMacOS = $derived(envStore.isMacOS);
-  let albumStageAspectRatio = $state(DEFAULT_ALBUM_STAGE_ASPECT_RATIO);
-  let albumStageWidth = $state(0);
-  const viewportHeight = $derived(envStore.viewportHeight);
-  let albumStageCollapseOffset = $state(0);
-  let albumStageScrollTop = $state(0);
-  let albumStageMotionFrame = 0;
-  let pendingAlbumStageCollapseOffset = 0;
-  let pendingAlbumStageScrollTop = 0;
+  const settingsState = $state({
+    format: 'flac' as OutputFormat,
+    outputDir: '',
+    downloadLyrics: true,
+    notifyOnDownloadComplete: true,
+    notifyOnPlaybackChange: true,
+    logLevel: 'error' as LogLevel,
+    settingsLogRefreshToken: 0,
+    prefsReady: false,
+    isSaving: false,
+    persistedSnapshot: '',
+    lastSaveFailedSnapshot: '',
+    dirty: {
+      format: false,
+      outputDir: false,
+      downloadLyrics: false,
+      notifyOnDownloadComplete: false,
+      notifyOnPlaybackChange: false,
+      logLevel: false,
+    },
+    suspendDirtyTracking: 0,
+  });
+  let selectedAlbumArtworkUrl = $state<string | null>(null);
+  let albumStageElement = $state<HTMLElement | null>(null);
+  const lastObservedSettings = {
+    format: settingsState.format,
+    outputDir: settingsState.outputDir,
+    downloadLyrics: settingsState.downloadLyrics,
+    notifyOnDownloadComplete: settingsState.notifyOnDownloadComplete,
+    notifyOnPlaybackChange: settingsState.notifyOnPlaybackChange,
+    logLevel: settingsState.logLevel,
+  };
 
   const playerHasPrevious = $derived(playerController.playerHasPrevious);
   const playerHasNext = $derived(playerController.playerHasNext);
@@ -231,55 +267,25 @@
     return activeIndex;
   });
 
-  function setContentViewport(instance: OverlayScrollbars) {
-    const viewport = instance.elements().viewport;
-    if (contentEl !== viewport) {
-      contentEl = viewport;
-    }
-  }
-
   const overlayScrollbarOptions = $derived.by(
     (): PartialOptions => ({
       scrollbars: {
-        theme: "os-theme-app",
-        autoHide: prefersReducedMotion ? "leave" : "move",
+        theme: 'os-theme-app',
+        autoHide: prefersReducedMotion ? 'leave' : 'move',
         autoHideDelay: prefersReducedMotion ? 160 : 720,
         autoHideSuspend: true,
         dragScroll: true,
         clickScroll: false,
       },
-    }),
-  );
-
-  const contentScrollbarEvents = $derived.by(
-    (): EventListeners => ({
-      initialized(instance) {
-        setContentViewport(instance);
-        handleContentScroll();
-      },
-      updated(instance) {
-        setContentViewport(instance);
-      },
-      destroyed() {
-        contentEl = null;
-      },
-      scroll(instance) {
-        setContentViewport(instance);
-        handleContentScroll();
-      },
-    }),
+    })
   );
 
   function resetContentScroll() {
-    resetAlbumStageMotion();
-    contentEl?.scrollTo({
-      top: 0,
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-    });
+    albumStageMotionController.resetContentScroll();
   }
 
   async function preloadAlbumArtwork(
-    album: AlbumDetail,
+    album: AlbumDetail
   ): Promise<number | null> {
     const sourceUrl = album.coverDeUrl ?? album.coverUrl ?? null;
     if (!sourceUrl) return null;
@@ -296,14 +302,8 @@
   }
 
   function setAlbumStageAspectRatio(value: number | null | undefined) {
-    if (value && Number.isFinite(value) && value > 0) {
-      albumStageAspectRatio = value;
-      return;
-    }
-
-    albumStageAspectRatio = DEFAULT_ALBUM_STAGE_ASPECT_RATIO;
+    albumStageMotionController.setAspectRatio(value);
   }
-
 
   function isSongSelected(songCid: string): boolean {
     return selectedSongCids.includes(songCid);
@@ -333,13 +333,9 @@
 
   function invertSongSelection() {
     if (!selectedAlbum) return;
-    const allCids = new Set(
-      selectedAlbum.songs.map((s: SongEntry) => s.cid),
-    );
+    const allCids = new Set(selectedAlbum.songs.map((s: SongEntry) => s.cid));
     const currentSelected = new Set(selectedSongCids);
-    selectedSongCids = [...allCids].filter(
-      (cid) => !currentSelected.has(cid),
-    );
+    selectedSongCids = [...allCids].filter((cid) => !currentSelected.has(cid));
   }
 
   function toggleSelectionMode() {
@@ -347,184 +343,6 @@
     if (!selectionModeEnabled) {
       clearSongSelection();
     }
-  }
-
-
-  function flushAlbumStageMotion() {
-    albumStageMotionFrame = 0;
-
-    if (albumStageCollapseOffset !== pendingAlbumStageCollapseOffset) {
-      albumStageCollapseOffset = pendingAlbumStageCollapseOffset;
-    }
-
-    if (albumStageScrollTop !== pendingAlbumStageScrollTop) {
-      albumStageScrollTop = pendingAlbumStageScrollTop;
-    }
-  }
-
-  function scheduleAlbumStageMotion(
-    next: {
-      collapseOffset?: number;
-      scrollTop?: number;
-    },
-    immediate = false,
-  ) {
-    pendingAlbumStageCollapseOffset =
-      next.collapseOffset ?? pendingAlbumStageCollapseOffset;
-    pendingAlbumStageScrollTop = next.scrollTop ?? pendingAlbumStageScrollTop;
-
-    if (immediate || prefersReducedMotion || typeof window === "undefined") {
-      if (albumStageMotionFrame) {
-        cancelAnimationFrame(albumStageMotionFrame);
-        albumStageMotionFrame = 0;
-      }
-      flushAlbumStageMotion();
-      return;
-    }
-
-    if (albumStageMotionFrame) {
-      return;
-    }
-
-    albumStageMotionFrame = requestAnimationFrame(() => {
-      flushAlbumStageMotion();
-    });
-  }
-
-  function resetAlbumStageMotion() {
-    if (albumStageMotionFrame) {
-      cancelAnimationFrame(albumStageMotionFrame);
-      albumStageMotionFrame = 0;
-    }
-
-    pendingAlbumStageCollapseOffset = 0;
-    pendingAlbumStageScrollTop = 0;
-    albumStageCollapseOffset = 0;
-    albumStageScrollTop = 0;
-  }
-
-  function syncAlbumStageWidth() {
-    albumStageWidth = albumStageEl?.clientWidth ?? 0;
-  }
-
-  const albumStageFullHeight = $derived.by(() => {
-    if (!albumStageWidth || !albumStageAspectRatio) {
-      return 0;
-    }
-
-    return albumStageWidth / albumStageAspectRatio;
-  });
-
-  const albumStageBaseHeight = $derived.by(() => {
-    if (!albumStageWidth) {
-      return 0;
-    }
-
-    return Math.min(
-      albumStageFullHeight,
-      viewportHeight * ALBUM_STAGE_BASE_VIEWPORT_RATIO,
-    );
-  });
-
-  const albumStageCollapseProgress = $derived.by(() =>
-    clamp(albumStageCollapseOffset / ALBUM_STAGE_COLLAPSE_SCROLL_RANGE, 0, 1),
-  );
-
-  const albumStageRevealProgress = $derived.by(
-    () => 1 - albumStageCollapseProgress,
-  );
-
-  const albumStageSolidifyProgress = $derived.by(() =>
-    Math.max(
-      albumStageCollapseProgress,
-      clamp(albumStageScrollTop / ALBUM_STAGE_SOLIDIFY_SCROLL_RANGE, 0, 1),
-    ),
-  );
-
-  const albumStageHeight = $derived.by(() => {
-    if (!albumStageBaseHeight) {
-      return 0;
-    }
-
-    return (
-      albumStageBaseHeight +
-      (albumStageFullHeight - albumStageBaseHeight) * albumStageRevealProgress
-    );
-  });
-
-  const albumStageStyle = $derived.by(
-    () => `--album-stage-aspect-ratio: ${albumStageAspectRatio}`,
-  );
-
-  type MotionTarget = Record<string, string | number>;
-
-  function motionTransition(duration: number, delay = 0): any {
-    const transition: any = {
-      duration: prefersReducedMotion ? 0 : duration,
-      delay: prefersReducedMotion ? 0 : delay,
-      ease: "easeOut" as const,
-    };
-
-    return transition;
-  }
-
-  function fadeEnter(opacity = 0): MotionTarget {
-    return prefersReducedMotion ? { opacity: 1 } : { opacity };
-  }
-
-  function fadeExit(opacity = 0): MotionTarget {
-    return { opacity };
-  }
-
-  const albumStageMotionHeight = $derived.by(() =>
-    albumStageHeight > 0
-      ? albumStageHeight
-      : Math.max(albumStageBaseHeight || 0, 280),
-  );
-
-  const albumStageMediaHeight = $derived.by(
-    () => `${albumStageMotionHeight}px`,
-  );
-  const albumStageScrimOpacity = $derived.by(() =>
-    Math.max(0.58, 1 - albumStageSolidifyProgress * 0.34),
-  );
-  const albumStageImageOpacity = $derived.by(
-    () => 1 - albumStageSolidifyProgress * 0.54,
-  );
-  const albumStageImageTransform = $derived.by(() =>
-    prefersReducedMotion
-      ? "translateZ(0) scale(1)"
-      : `translateZ(0) scale(${1 + albumStageRevealProgress * 0.006 + albumStageSolidifyProgress * 0.012})`,
-  );
-  const albumStageSolidifyOpacity = $derived.by(
-    () => albumStageSolidifyProgress,
-  );
-
-  function toolbarButtonAnimate(
-    active = false,
-    accented = false,
-    disabled = false,
-  ): MotionTarget {
-    return {
-      opacity: disabled ? 0.42 : 1,
-      backgroundColor: active
-        ? "var(--accent-light)"
-        : "rgba(255, 255, 255, 0.78)",
-      color: active || accented ? "var(--accent)" : "var(--text-primary)",
-      boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.94)",
-    };
-  }
-
-  function toolbarButtonHover(disabled = false): MotionTarget | undefined {
-    if (disabled) {
-      return undefined;
-    }
-
-    return {
-      backgroundColor: "rgba(var(--accent-rgb), 0.1)",
-      boxShadow: "0 10px 22px rgba(var(--accent-rgb), 0.14)",
-      ...(prefersReducedMotion ? {} : { y: -1 }),
-    };
   }
 
   $effect(() => {
@@ -550,7 +368,8 @@
   });
 
   $effect(() => {
-    const sourceUrl = selectedAlbum?.coverDeUrl ?? selectedAlbum?.coverUrl ?? null;
+    const sourceUrl =
+      selectedAlbum?.coverDeUrl ?? selectedAlbum?.coverUrl ?? null;
     const requestSeq = ++artworkRequestSeq;
 
     if (!sourceUrl) {
@@ -570,51 +389,112 @@
     })();
   });
 
-  // Auto-save preferences via unified preferences API (after initialization)
-  $effect(() => {
-    const _fmt = format;
-    if (!prefsReady) return;
-    void savePreferences();
-  });
-
-  $effect(() => {
-    const _lyrics = downloadLyrics;
-    if (!prefsReady) return;
-    void savePreferences();
-  });
-
-  $effect(() => {
-    const _notif = notifyOnDownloadComplete;
-    if (!prefsReady) return;
-    void savePreferences();
-  });
-
-  $effect(() => {
-    const _playback = notifyOnPlaybackChange;
-    if (!prefsReady) return;
-    void savePreferences();
-  });
-
-  $effect(() => {
-    const _logLevel = logLevel;
-    if (!prefsReady) return;
-    void savePreferences();
-  });
-
-  $effect(() => {
-    if (!albumStageEl) return;
-
-    syncAlbumStageWidth();
-
-    if (typeof ResizeObserver === "undefined") return;
-
-    const observer = new ResizeObserver(() => {
-      syncAlbumStageWidth();
+  function getSettingsSnapshot() {
+    return JSON.stringify({
+      format: settingsState.format,
+      outputDir: settingsState.outputDir,
+      downloadLyrics: settingsState.downloadLyrics,
+      notifyOnDownloadComplete: settingsState.notifyOnDownloadComplete,
+      notifyOnPlaybackChange: settingsState.notifyOnPlaybackChange,
+      logLevel: settingsState.logLevel,
     });
+  }
 
-    observer.observe(albumStageEl);
+  $effect(() => {
+    const value = settingsState.format;
+    if (settingsState.suspendDirtyTracking > 0) {
+      lastObservedSettings.format = value;
+      return;
+    }
+    if (value !== lastObservedSettings.format) {
+      settingsState.dirty.format = true;
+      lastObservedSettings.format = value;
+    }
+  });
 
-    return () => observer.disconnect();
+  $effect(() => {
+    const value = settingsState.outputDir;
+    if (settingsState.suspendDirtyTracking > 0) {
+      lastObservedSettings.outputDir = value;
+      return;
+    }
+    if (value !== lastObservedSettings.outputDir) {
+      settingsState.dirty.outputDir = true;
+      lastObservedSettings.outputDir = value;
+    }
+  });
+
+  $effect(() => {
+    const value = settingsState.downloadLyrics;
+    if (settingsState.suspendDirtyTracking > 0) {
+      lastObservedSettings.downloadLyrics = value;
+      return;
+    }
+    if (value !== lastObservedSettings.downloadLyrics) {
+      settingsState.dirty.downloadLyrics = true;
+      lastObservedSettings.downloadLyrics = value;
+    }
+  });
+
+  $effect(() => {
+    const value = settingsState.notifyOnDownloadComplete;
+    if (settingsState.suspendDirtyTracking > 0) {
+      lastObservedSettings.notifyOnDownloadComplete = value;
+      return;
+    }
+    if (value !== lastObservedSettings.notifyOnDownloadComplete) {
+      settingsState.dirty.notifyOnDownloadComplete = true;
+      lastObservedSettings.notifyOnDownloadComplete = value;
+    }
+  });
+
+  $effect(() => {
+    const value = settingsState.notifyOnPlaybackChange;
+    if (settingsState.suspendDirtyTracking > 0) {
+      lastObservedSettings.notifyOnPlaybackChange = value;
+      return;
+    }
+    if (value !== lastObservedSettings.notifyOnPlaybackChange) {
+      settingsState.dirty.notifyOnPlaybackChange = true;
+      lastObservedSettings.notifyOnPlaybackChange = value;
+    }
+  });
+
+  $effect(() => {
+    const value = settingsState.logLevel;
+    if (settingsState.suspendDirtyTracking > 0) {
+      lastObservedSettings.logLevel = value;
+      return;
+    }
+    if (value !== lastObservedSettings.logLevel) {
+      settingsState.dirty.logLevel = true;
+      lastObservedSettings.logLevel = value;
+    }
+  });
+
+  $effect(() => {
+    settingsState.persistedSnapshot;
+    settingsState.isSaving;
+    settingsState.lastSaveFailedSnapshot;
+    if (!settingsState.prefsReady || settingsState.isSaving) {
+      return;
+    }
+
+    const currentSnapshot = getSettingsSnapshot();
+
+    if (currentSnapshot === settingsState.persistedSnapshot) {
+      return;
+    }
+
+    if (currentSnapshot === settingsState.lastSaveFailedSnapshot) {
+      return;
+    }
+
+    void settingsController.savePreferences(settingsState);
+  });
+
+  $effect(() => {
+    albumStageMotionController.albumStageElement = albumStageElement;
   });
 
   async function bootstrapApp(shouldDispose: () => boolean) {
@@ -629,26 +509,16 @@
     }
 
     try {
-      const prefs = await getPreferences();
-      if (shouldDispose()) {
-        return;
-      }
-      outputDir = prefs.outputDir || outputDir;
-      format = prefs.outputFormat || format;
-      downloadLyrics = prefs.downloadLyrics;
-      notifyOnDownloadComplete = prefs.notifyOnDownloadComplete;
-      notifyOnPlaybackChange = prefs.notifyOnPlaybackChange;
-      logLevel = prefs.logLevel;
-      prefsReady = true;
+      await settingsController.hydratePreferences(settingsState, {
+        shouldDispose,
+      });
     } catch {
-      if (!shouldDispose()) {
-        prefsReady = true;
-      }
+      // Preferences hydration failure is already tolerated in controller.
     }
 
-    const defaultDirPromise = outputDir
-      ? Promise.resolve("")
-      : getDefaultOutputDir().catch(() => "");
+    const defaultDirPromise = settingsState.outputDir
+      ? Promise.resolve('')
+      : getDefaultOutputDir().catch(() => '');
 
     try {
       const albumList = await libraryController.loadAlbums({ shouldDispose });
@@ -657,8 +527,8 @@
       if (shouldDispose()) {
         return;
       }
-      if (defaultDir && !outputDir) {
-        outputDir = defaultDir;
+      if (defaultDir) {
+        settingsController.applyDefaultOutputDir(settingsState, defaultDir);
       }
 
       try {
@@ -692,8 +562,8 @@
       if (shouldDispose()) {
         return;
       }
-      if (defaultDir && !outputDir) {
-        outputDir = defaultDir;
+      if (defaultDir) {
+        settingsController.applyDefaultOutputDir(settingsState, defaultDir);
       }
     }
 
@@ -733,7 +603,7 @@
 
     async function register<T>(
       eventName: string,
-      handler: (event: { payload: T }) => void | Promise<void>,
+      handler: (event: { payload: T }) => void | Promise<void>
     ) {
       const unlisten = await listen<T>(eventName, async (event) => {
         if (shouldDispose()) {
@@ -752,59 +622,79 @@
     }
 
     try {
-      if (!(await register<PlayerState>("player-state-changed", (event) => {
-        playerStateHydratedFromEvent = true;
-        playerController.syncPlayerState(event.payload);
-      }))) {
+      if (
+        !(await register<PlayerState>('player-state-changed', (event) => {
+          playerStateHydratedFromEvent = true;
+          playerController.syncPlayerState(event.payload);
+        }))
+      ) {
         return cleanup;
       }
 
-      if (!(await register<PlayerState>("player-progress", (event) => {
-        playerController.syncPlayerProgress(event.payload);
-      }))) {
+      if (
+        !(await register<PlayerState>('player-progress', (event) => {
+          playerController.syncPlayerProgress(event.payload);
+        }))
+      ) {
         return cleanup;
       }
 
-      if (!(await register<DownloadManagerSnapshot>(
-        "download-manager-state-changed",
-        (event) => {
-          downloadController.applyManagerEvent(event.payload);
-        },
-      ))) {
+      if (
+        !(await register<DownloadManagerSnapshot>(
+          'download-manager-state-changed',
+          (event) => {
+            downloadController.applyManagerEvent(event.payload);
+          }
+        ))
+      ) {
         return cleanup;
       }
 
-      if (!(await register<DownloadJobSnapshot>("download-job-updated", (event) => {
-        downloadController.applyJobUpdate(event.payload);
-      }))) {
+      if (
+        !(await register<DownloadJobSnapshot>(
+          'download-job-updated',
+          (event) => {
+            downloadController.applyJobUpdate(event.payload);
+          }
+        ))
+      ) {
         return cleanup;
       }
 
-      if (!(await register<DownloadTaskProgressEvent>("download-task-progress", (event) => {
-        downloadController.applyTaskProgress(event.payload);
-      }))) {
+      if (
+        !(await register<DownloadTaskProgressEvent>(
+          'download-task-progress',
+          (event) => {
+            downloadController.applyTaskProgress(event.payload);
+          }
+        ))
+      ) {
         return cleanup;
       }
 
-      if (!(await register<AppErrorEvent>("app-error-recorded", (event) => {
-        handleAppErrorEvent(event.payload);
-      }))) {
+      if (
+        !(await register<AppErrorEvent>('app-error-recorded', (event) => {
+          handleAppErrorEvent(event.payload);
+        }))
+      ) {
         return cleanup;
       }
 
-      if (!(await register<LocalInventorySnapshot>(
-        "local-inventory-state-changed",
-        async (event) => {
-          await libraryController.handleInventoryStateChanged(event.payload, {
-            shouldDispose,
-            invalidateInventoryCaches,
-            onSelectionInvalidated: () => {
-              clearSongSelection();
-              selectionModeEnabled = false;
-            },
-          });
-        },
-      ))) {
+      if (
+        !(await register<LocalInventorySnapshot>(
+          'local-inventory-state-changed',
+          async (event) => {
+            await libraryController.handleInventoryStateChanged(event.payload, {
+              shouldDispose,
+              invalidateInventoryCaches,
+              onSelectionInvalidated: () => {
+                clearSongSelection();
+                selectionModeEnabled = false;
+              },
+            });
+          }
+        ))
+      ) {
         return cleanup;
       }
 
@@ -822,11 +712,9 @@
     libraryController.dispose();
     playerController.dispose();
     downloadController.dispose();
+    albumStageMotionController.dispose();
     playerStateInitSeq += 1;
     playerStateHydratedFromEvent = false;
-    if (albumStageMotionFrame) {
-      cancelAnimationFrame(albumStageMotionFrame);
-    }
     unsubscribe?.();
   }
 
@@ -855,7 +743,7 @@
           return;
         }
         notifyError(
-          `初始化应用失败：${error instanceof Error ? error.message : String(error)}`,
+          `初始化应用失败：${error instanceof Error ? error.message : String(error)}`
         );
       }
     })();
@@ -882,15 +770,15 @@
       }
 
       const row = contentEl.querySelector<HTMLElement>(
-        `[data-song-cid="${CSS.escape(expectedSongCid)}"]`,
+        `[data-song-cid="${CSS.escape(expectedSongCid)}"]`
       );
       if (!row) {
         return;
       }
 
       row.scrollIntoView({
-        behavior: prefersReducedMotion ? "auto" : "smooth",
-        block: "center",
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'center',
       });
       libraryController.clearPendingScrollToSong(expectedSongCid);
     });
@@ -899,11 +787,13 @@
   async function handleSelectSearchResult(item: SearchLibraryResultItem) {
     const album = albums.find((candidate) => candidate.cid === item.albumCid);
     if (!album) {
-      notifyError("未找到对应专辑，可能需要先刷新列表。");
+      notifyError('未找到对应专辑，可能需要先刷新列表。');
       return;
     }
 
-    libraryController.setPendingScrollToSong(item.kind === "song" ? item.songCid : null);
+    libraryController.setPendingScrollToSong(
+      item.kind === 'song' ? item.songCid : null
+    );
     clearSongSelection();
     selectionModeEnabled = false;
     await libraryController.selectAlbum(album, {
@@ -914,115 +804,19 @@
     });
   }
 
-  function handleContentScroll() {
-    if (loadingDetail) {
-      scheduleAlbumStageMotion({ scrollTop: 0 }, true);
-      return;
-    }
-
-    const nextScrollTop = Math.max(0, contentEl?.scrollTop ?? 0);
-    const nextCollapseOffset =
-      nextScrollTop > 0 &&
-      pendingAlbumStageCollapseOffset < ALBUM_STAGE_COLLAPSE_SCROLL_RANGE
-        ? ALBUM_STAGE_COLLAPSE_SCROLL_RANGE
-        : undefined;
-
-    scheduleAlbumStageMotion({
-      scrollTop: nextScrollTop,
-      collapseOffset: nextCollapseOffset,
-    });
-  }
-
   function handleContentWheel(event: WheelEvent) {
-    if (loadingDetail || !contentEl) {
-      return;
-    }
-
-    const atTop = (contentEl.scrollTop ?? 0) <= 0.5;
-
-    if (!atTop) {
-      return;
-    }
-
-    if (
-      event.deltaY > 0 &&
-      pendingAlbumStageCollapseOffset < ALBUM_STAGE_COLLAPSE_SCROLL_RANGE
-    ) {
-      event.preventDefault();
-      scheduleAlbumStageMotion({
-        collapseOffset: clamp(
-          pendingAlbumStageCollapseOffset + event.deltaY,
-          0,
-          ALBUM_STAGE_COLLAPSE_SCROLL_RANGE,
-        ),
-        scrollTop: 0,
-      });
-      return;
-    }
-
-    if (event.deltaY < 0 && pendingAlbumStageCollapseOffset > 0) {
-      event.preventDefault();
-      scheduleAlbumStageMotion({
-        collapseOffset: clamp(
-          pendingAlbumStageCollapseOffset + event.deltaY,
-          0,
-          ALBUM_STAGE_COLLAPSE_SCROLL_RANGE,
-        ),
-        scrollTop: 0,
-      });
-    }
+    albumStageMotionController.handleContentWheel(event);
   }
-
-  let settingsOpen = $state(false);
-  let downloadLyrics = $state(true);
-  let notifyOnDownloadComplete = $state(true);
-  let notifyOnPlaybackChange = $state(true);
-  let logLevel = $state<LogLevel>("error");
-  let isFormatHovered = $state(false);
-  let isFormatFocused = $state(false);
-  let isOutputDirHovered = $state(false);
-  let isOutputDirFocused = $state(false);
-  let settingsLogRefreshToken = $state(0);
-  let prefsReady = $state(false);
 
   function handleAppErrorEvent(event: AppErrorEvent) {
     notifyError(event.message);
-    if (settingsOpen) {
-      settingsLogRefreshToken += 1;
-    }
+    settingsController.handleAppError(settingsState, settingsOpen);
   }
 
   async function invalidateInventoryCaches(
-    inventoryVersion: string | null | undefined,
+    inventoryVersion: string | null | undefined
   ) {
     await invalidateByTag(createInventoryCacheTag(inventoryVersion));
-  }
-
-  async function savePreferences(): Promise<boolean> {
-    const prefs: AppPreferences = {
-      outputFormat: format,
-      outputDir,
-      downloadLyrics,
-      notifyOnDownloadComplete,
-      notifyOnPlaybackChange,
-      logLevel,
-    };
-    try {
-      const updated = await setPreferences(prefs);
-      // Sync from returned values (backend may have normalized them)
-      format = updated.outputFormat;
-      outputDir = updated.outputDir;
-      downloadLyrics = updated.downloadLyrics;
-      notifyOnDownloadComplete = updated.notifyOnDownloadComplete;
-      notifyOnPlaybackChange = updated.notifyOnPlaybackChange;
-      logLevel = updated.logLevel;
-      return true;
-    } catch (e) {
-      notifyError(
-        `保存设置失败：${e instanceof Error ? e.message : String(e)}`,
-      );
-      return false;
-    }
   }
 
   function notifyInfo(message: string) {
@@ -1032,76 +826,6 @@
   function notifyError(message: string) {
     toast.error(message);
   }
-
-  async function ensureSettingsSheetLoaded(): Promise<boolean> {
-    if (SettingsSheetView) {
-      return true;
-    }
-
-    if (!settingsSheetLoader) {
-      settingsSheetLoader = import("$lib/components/app/SettingsSheet.svelte")
-        .then((module) => {
-          SettingsSheetView = module.default;
-          return module.default;
-        })
-        .finally(() => {
-          settingsSheetLoader = null;
-        });
-    }
-
-    try {
-      await settingsSheetLoader;
-      return true;
-    } catch (error) {
-      notifyError(
-        `打开设置面板失败：${error instanceof Error ? error.message : String(error)}`,
-      );
-      return false;
-    }
-  }
-
-  async function ensureDownloadTasksSheetLoaded(): Promise<boolean> {
-    if (DownloadTasksSheetView) {
-      return true;
-    }
-
-    if (!downloadTasksSheetLoader) {
-      downloadTasksSheetLoader = import("$lib/components/app/DownloadTasksSheet.svelte")
-        .then((module) => {
-          DownloadTasksSheetView = module.default;
-          return module.default;
-        })
-        .finally(() => {
-          downloadTasksSheetLoader = null;
-        });
-    }
-
-    try {
-      await downloadTasksSheetLoader;
-      return true;
-    } catch (error) {
-      notifyError(
-        `打开下载任务面板失败：${error instanceof Error ? error.message : String(error)}`,
-      );
-      return false;
-    }
-  }
-
-  async function openSettingsPanel() {
-    if (settingsOpen) {
-      settingsOpen = false;
-      return;
-    }
-
-    const loaded = await ensureSettingsSheetLoaded();
-    if (!loaded) {
-      return;
-    }
-
-    settingsOpen = true;
-    downloadPanelOpen = false;
-  }
-
 
   async function handlePlay(song: SongEntry) {
     const sourceEntries = buildAlbumPlaybackEntries(selectedAlbum);
@@ -1119,7 +843,11 @@
     const nextIndex = nextOrder.findIndex((entry) => entry.cid === song.cid);
     if (nextIndex < 0) return;
 
-    await playerController.playQueueEntry(nextOrder[nextIndex], nextOrder, nextIndex);
+    await playerController.playQueueEntry(
+      nextOrder[nextIndex],
+      nextOrder,
+      nextIndex
+    );
   }
 
   // Refresh cache and reload current album
@@ -1142,7 +870,9 @@
         },
       });
     } catch (e) {
-      notifyError(`刷新专辑列表失败：${e instanceof Error ? e.message : String(e)}`);
+      notifyError(
+        `刷新专辑列表失败：${e instanceof Error ? e.message : String(e)}`
+      );
     } finally {
       await delay(400);
       isRefreshing = false;
@@ -1162,45 +892,32 @@
 
 <div class="container" class:macos-overlay={isMacOS}>
   <!-- 专辑列表侧边栏 -->
-  <OverlayScrollbarsComponent
-    element="aside"
-    class="sidebar"
-    data-overlayscrollbars-initialize
-    options={overlayScrollbarOptions}
-    defer
-  >
-    {#if isMacOS}
-      <div
-        class="sidebar-drag-region"
-        data-tauri-drag-region
-        aria-hidden="true"
-      ></div>
-    {/if}
-    <AlbumSidebar
-      {albums}
-      {selectedAlbumCid}
-      reducedMotion={prefersReducedMotion}
-      {loadingAlbums}
-      {errorMsg}
-      searchQuery={librarySearchQuery}
-      searchScope={librarySearchScope}
-      searchLoading={librarySearchLoading}
-      searchResponse={librarySearchResponse}
-      onSearchQueryChange={libraryController.setSearchQuery}
-      onSearchScopeChange={libraryController.setSearchScope}
-      onSelect={(album) => {
-        clearSongSelection();
-        selectionModeEnabled = false;
-        return libraryController.selectAlbum(album, {
-          afterSelect: async () => {
-            await tick();
-            resetContentScroll();
-          },
-        });
-      }}
-      onSelectSearchResult={handleSelectSearchResult}
-    />
-  </OverlayScrollbarsComponent>
+  <AlbumSidebarContainer
+    {isMacOS}
+    {albums}
+    {selectedAlbumCid}
+    reducedMotion={prefersReducedMotion}
+    {loadingAlbums}
+    {errorMsg}
+    searchQuery={librarySearchQuery}
+    searchScope={librarySearchScope}
+    searchLoading={librarySearchLoading}
+    searchResponse={librarySearchResponse}
+    {overlayScrollbarOptions}
+    onSearchQueryChange={libraryController.setSearchQuery}
+    onSearchScopeChange={libraryController.setSearchScope}
+    onSelect={(album: Album) => {
+      clearSongSelection();
+      selectionModeEnabled = false;
+      return libraryController.selectAlbum(album, {
+        afterSelect: async () => {
+          await tick();
+          resetContentScroll();
+        },
+      });
+    }}
+    onSelectSearchResult={handleSelectSearchResult}
+  />
 
   <section class="main-region">
     {#if isMacOS}
@@ -1218,137 +935,63 @@
       {downloadPanelOpen}
       onRefresh={handleRefresh}
       onOpenDownloads={async () => {
-        const nextOpen = !downloadPanelOpen;
-        if (nextOpen) {
-          await downloadController.openPanel();
-          return;
-        }
-        downloadPanelOpen = false;
+        await shellStore.toggleDownloads({ notifyError });
       }}
       onOpenSettings={async () => {
-        await openSettingsPanel();
+        await shellStore.toggleSettings({ notifyError });
       }}
     />
 
-
     <!-- 歌曲列表内容区 -->
-    <AlbumWorkspace
-      {currentSong}
-      {loadingDetail}
-      {selectedAlbum}
-    >
+    <AlbumWorkspace {currentSong} {loadingDetail} {selectedAlbum}>
       {#snippet children()}
-    <OverlayScrollbarsComponent
-      element="div"
-      class="h-full"
-      data-overlayscrollbars-initialize
-      options={overlayScrollbarOptions}
-      events={contentScrollbarEvents}
-      defer
-      onwheel={handleContentWheel}
-      aria-busy={loadingDetail}
-    >
-      <AnimatePresence mode="wait">
-        {#if loadingDetail && showDetailSkeleton}
-          <motion.section
-            key={`loading-${albumRequestSeq}`}
-            class="album-panel album-panel-loading"
-            initial={fadeEnter()}
-            animate={{ opacity: 1 }}
-            exit={fadeExit()}
-            transition={motionTransition(PANEL_DURATION)}
-          >
-            <AlbumStage
-              loading={true}
-              reducedMotion={prefersReducedMotion}
-              stageStyle={albumStageStyle}
-              mediaHeight={albumStageMediaHeight}
-              scrimOpacity={albumStageScrimOpacity}
-              bind:element={albumStageEl}
-            />
-            <AlbumDetailSkeleton reducedMotion={prefersReducedMotion} />
-          </motion.section>
-        {:else if selectedAlbum}
-          <motion.section
-            key={selectedAlbum.cid}
-            class="album-panel"
-            initial={fadeEnter()}
-            animate={{ opacity: 1 }}
-            exit={fadeExit()}
-            transition={motionTransition(PANEL_DURATION)}
-          >
-            <AlbumStage
-              albumName={selectedAlbum.name}
-              artworkUrl={selectedAlbumArtworkUrl}
-              reducedMotion={prefersReducedMotion}
-              stageStyle={albumStageStyle}
-              mediaHeight={albumStageMediaHeight}
-              scrimOpacity={albumStageScrimOpacity}
-              imageOpacity={albumStageImageOpacity}
-              imageTransform={albumStageImageTransform}
-              solidifyOpacity={albumStageSolidifyOpacity}
-              bind:element={albumStageEl}
-            />
-            <AlbumDetailPanel
-              album={selectedAlbum}
-              currentSongCid={currentSong?.cid ?? null}
-              isPlaybackActive={isPlaying || isPaused}
-              {downloadingAlbumCid}
-              {selectionModeEnabled}
-              {selectedSongCids}
-              reducedMotion={prefersReducedMotion}
-              onToggleSelectionMode={toggleSelectionMode}
-              onSelectAllSongs={selectAllSongs}
-              onDeselectAllSongs={deselectAllSongs}
-              onInvertSongSelection={invertSongSelection}
-              onDownloadAlbum={downloadController.handleAlbumDownload}
-              onDownloadSelection={(songCids) =>
-                downloadController.handleSelectionDownload(songCids, {
-                  afterCreated: () => {
-                    clearSongSelection();
-                    selectionModeEnabled = false;
-                  },
-                })}
-              onPlaySong={handlePlay}
-              onDownloadSong={downloadController.handleSongDownload}
-              onToggleSongSelection={toggleSongSelection}
-              {isSongSelected}
-              getSongDownloadState={downloadController.getSongDownloadState}
-              isSongDownloadInteractionBlocked={downloadController.isSongDownloadInteractionBlocked}
-              hasAlbumDownloadJob={(albumCid) =>
-                !!downloadController.findAlbumDownloadJob(albumCid)}
-              isSelectionDownloadDisabled={downloadController.isSelectionDownloadActionDisabled}
-              isCurrentSelectionCreating={downloadController.isCurrentSelectionCreating}
-              hasCurrentSelectionJob={(songCids) =>
-                !!downloadController.getCurrentSelectionJob(songCids)}
-            />          </motion.section>
-        {/if}
-      </AnimatePresence>
-
-      {#if !loadingDetail && !selectedAlbum}
-        <h1 class="page-title">选择专辑</h1>
-        <p class="page-subtitle">从左侧选择一个专辑以查看歌曲</p>
-      {/if}
-
-      <AnimatePresence>
-        {#if loadingDetail && selectedAlbum}
-          <motion.div
-            key={`content-mask-${albumRequestSeq}`}
-            class="content-loading-mask"
-            aria-hidden="true"
-            initial={fadeEnter()}
-            animate={{ opacity: 1 }}
-            exit={fadeExit()}
-            transition={motionTransition(CONTENT_MASK_DURATION)}
-          >
-            <MotionSpinner
-              className="content-loading-mask-spinner"
-              reducedMotion={prefersReducedMotion}
-            />
-          </motion.div>
-        {/if}
-      </AnimatePresence>
-    </OverlayScrollbarsComponent>
+        <AlbumWorkspaceContent
+          {loadingDetail}
+          {showDetailSkeleton}
+          {albumRequestSeq}
+          {selectedAlbum}
+          {selectedAlbumArtworkUrl}
+          currentSongCid={currentSong?.cid ?? null}
+          isPlaybackActive={isPlaying || isPaused}
+          {downloadingAlbumCid}
+          {selectionModeEnabled}
+          {selectedSongCids}
+          reducedMotion={prefersReducedMotion}
+          {overlayScrollbarOptions}
+          {contentScrollbarEvents}
+          onContentWheel={handleContentWheel}
+          {albumStageStyle}
+          {albumStageMediaHeight}
+          {albumStageScrimOpacity}
+          {albumStageImageOpacity}
+          {albumStageImageTransform}
+          {albumStageSolidifyOpacity}
+          bind:albumStageElement
+          onToggleSelectionMode={toggleSelectionMode}
+          onSelectAllSongs={selectAllSongs}
+          onDeselectAllSongs={deselectAllSongs}
+          onInvertSongSelection={invertSongSelection}
+          onDownloadAlbum={downloadController.handleAlbumDownload}
+          onDownloadSelection={(songCids: string[]) =>
+            downloadController.handleSelectionDownload(songCids, {
+              afterCreated: () => {
+                clearSongSelection();
+                selectionModeEnabled = false;
+              },
+            })}
+          onPlaySong={handlePlay}
+          onDownloadSong={downloadController.handleSongDownload}
+          onToggleSongSelection={toggleSongSelection}
+          {isSongSelected}
+          getSongDownloadState={downloadController.getSongDownloadState}
+          isSongDownloadInteractionBlocked={downloadController.isSongDownloadInteractionBlocked}
+          hasAlbumDownloadJob={(albumCid: string) =>
+            !!downloadController.findAlbumDownloadJob(albumCid)}
+          isSelectionDownloadDisabled={downloadController.isSelectionDownloadActionDisabled}
+          isCurrentSelectionCreating={downloadController.isCurrentSelectionCreating}
+          hasCurrentSelectionJob={(songCids: string[]) =>
+            !!downloadController.getCurrentSelectionJob(songCids)}
+        />
       {/snippet}
     </AlbumWorkspace>
 
@@ -1373,7 +1016,7 @@
       {playbackOrder}
       downloadState={currentSong
         ? downloadController.getSongDownloadState(currentSong.cid)
-        : "idle"}
+        : 'idle'}
       downloadDisabled={currentSong
         ? downloadController.isSongDownloadInteractionBlocked(currentSong.cid)
         : false}
@@ -1394,29 +1037,25 @@
       }}
       onPlayQueueEntry={playerController.playQueueEntry}
     />
-  </section>
 
-  {#if SettingsSheetView}
-    <SettingsSheetView
-      bind:open={settingsOpen}
-      bind:format
-      bind:outputDir
-      bind:downloadLyrics
-      bind:notifyOnDownloadComplete
-      bind:notifyOnPlaybackChange
-      bind:logLevel
-      logRefreshToken={settingsLogRefreshToken}
+    <AppSideSheets
+      {SettingsSheetView}
+      {DownloadTasksSheetView}
+      bind:settingsOpen={shellStore.settingsOpen}
+      bind:downloadPanelOpen={shellStore.downloadPanelOpen}
+      bind:format={settingsState.format}
+      bind:outputDir={settingsState.outputDir}
+      bind:downloadLyrics={settingsState.downloadLyrics}
+      bind:notifyOnDownloadComplete={settingsState.notifyOnDownloadComplete}
+      bind:notifyOnPlaybackChange={settingsState.notifyOnPlaybackChange}
+      bind:logLevel={settingsState.logLevel}
+      settingsLogRefreshToken={settingsState.settingsLogRefreshToken}
       {notifyInfo}
       {notifyError}
-      onOutputDirChange={() => savePreferences()}
-    />
-  {/if}
-
-  {#if DownloadTasksSheetView}
-    <DownloadTasksSheetView
-      bind:open={downloadPanelOpen}
+      onOutputDirChange={() =>
+        settingsController.savePreferences(settingsState)}
       jobs={filteredDownloadJobs}
-      hasDownloadHistory={hasDownloadHistory}
+      {hasDownloadHistory}
       bind:searchQuery={downloadController.searchQuery}
       bind:scopeFilter={downloadController.scopeFilter}
       bind:statusFilter={downloadController.statusFilter}
@@ -1439,6 +1078,5 @@
       onCancelDownloadTask={downloadController.handleCancelDownloadTask}
       onRetryDownloadTask={downloadController.handleRetryDownloadTask}
     />
-  {/if}
-
+  </section>
 </div>

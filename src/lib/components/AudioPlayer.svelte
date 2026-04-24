@@ -89,20 +89,50 @@
     return Number((event.currentTarget as HTMLInputElement).value);
   }
 
-  const canSeek = $derived.by(() => !!song && duration > 0 && !isLoading && !!onSeek);
-  const canShuffle = $derived.by(() => !!song && !isLoading && !!onShuffleChange);
-  const canRepeat = $derived.by(() => !!song && !isLoading && !!onRepeatModeChange);
-  const shownProgress = $derived.by(() => (seekPreview === null ? progress : seekPreview));
+  const canSeek = $derived.by(
+    () => !!song && duration > 0 && !isLoading && !!onSeek
+  );
+  const canShuffle = $derived.by(
+    () => !!song && !isLoading && !!onShuffleChange
+  );
+  const canRepeat = $derived.by(
+    () => !!song && !isLoading && !!onRepeatModeChange
+  );
+  const shownProgress = $derived.by(() =>
+    seekPreview === null ? progress : seekPreview
+  );
   const safeDuration = $derived.by(() => (duration > 0 ? duration : 1));
-  const remainingProgress = $derived.by(() => Math.max(duration - shownProgress, 0));
-  const progressRatio = $derived.by(() => clamp(shownProgress / safeDuration, 0, 1));
-  const artistText = $derived.by(() => (song?.artists?.length ? song.artists.join(' · ') : '未知艺术家'));
-  const subtitle = $derived.by(() => (isLoading ? `${artistText} · 加载中` : isPaused ? `${artistText} · 已暂停` : artistText));
-  const repeatLabel = $derived.by(() => (repeatMode === 'one' ? '单曲循环' : '列表循环'));
-  const playerState = $derived.by(() => (isLoading ? 'loading' : isPlaying ? 'playing' : isPaused ? 'paused' : 'idle'));
-  const detailPanel = $derived.by(() => (lyricsActive ? 'lyrics' : playlistActive ? 'playlist' : 'none'));
-  const lyricsButtonLabel = $derived.by(() => (lyricsActive ? '关闭歌词' : '打开歌词'));
-  const playlistButtonLabel = $derived.by(() => (playlistActive ? '关闭播放列表' : '打开播放列表'));
+  const remainingProgress = $derived.by(() =>
+    Math.max(duration - shownProgress, 0)
+  );
+  const progressRatio = $derived.by(() =>
+    clamp(shownProgress / safeDuration, 0, 1)
+  );
+  const artistText = $derived.by(() =>
+    song?.artists?.length ? song.artists.join(' · ') : '未知艺术家'
+  );
+  const subtitle = $derived.by(() =>
+    isLoading
+      ? `${artistText} · 加载中`
+      : isPaused
+        ? `${artistText} · 已暂停`
+        : artistText
+  );
+  const repeatLabel = $derived.by(() =>
+    repeatMode === 'one' ? '单曲循环' : '列表循环'
+  );
+  const playerState = $derived.by(() =>
+    isLoading ? 'loading' : isPlaying ? 'playing' : isPaused ? 'paused' : 'idle'
+  );
+  const detailPanel = $derived.by(() =>
+    lyricsActive ? 'lyrics' : playlistActive ? 'playlist' : 'none'
+  );
+  const lyricsButtonLabel = $derived.by(() =>
+    lyricsActive ? '关闭歌词' : '打开歌词'
+  );
+  const playlistButtonLabel = $derived.by(() =>
+    playlistActive ? '关闭播放列表' : '打开播放列表'
+  );
   const downloadButtonLabel = $derived.by(() => {
     if (!song) return '下载当前歌曲';
 
@@ -117,9 +147,21 @@
         return `下载 ${song.name}`;
     }
   });
-  const canDownload = $derived.by(() => !!song && !isLoading && !!onDownload && downloadState === 'idle' && !downloadDisabled);
-  const remainingLabel = $derived.by(() => (duration > 0 ? `-${formatTime(remainingProgress)}` : '0:00'));
-  const progressStyle = $derived.by(() => `--progress-ratio:${progressRatio};--motion-duration:${reducedMotion ? '0ms' : 'var(--motion-base)'}`);
+  const canDownload = $derived.by(
+    () =>
+      !!song &&
+      !isLoading &&
+      !!onDownload &&
+      downloadState === 'idle' &&
+      !downloadDisabled
+  );
+  const remainingLabel = $derived.by(() =>
+    duration > 0 ? `-${formatTime(remainingProgress)}` : '0:00'
+  );
+  const progressStyle = $derived.by(
+    () =>
+      `--progress-ratio:${progressRatio};--motion-duration:${reducedMotion ? '0ms' : 'var(--motion-base)'}`
+  );
 
   $effect(() => {
     const currentCid = song?.cid ?? null;
@@ -152,7 +194,11 @@
   });
 
   $effect(() => {
-    if (!draggingSeek && seekPreview !== null && Math.abs(seekPreview - progress) < 0.25) {
+    if (
+      !draggingSeek &&
+      seekPreview !== null &&
+      Math.abs(seekPreview - progress) < 0.25
+    ) {
       seekPreview = null;
     }
   });
@@ -234,8 +280,18 @@
       </button>
 
       <div class="transport-cluster">
-        <button type="button" class="icon-button transport-button" aria-label="上一首" disabled={!hasPrevious || isLoading} onclick={() => onPrevious?.()}>
-          <svg class="control-icon solid-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <button
+          type="button"
+          class="icon-button transport-button"
+          aria-label="上一首"
+          disabled={!hasPrevious || isLoading}
+          onclick={() => onPrevious?.()}
+        >
+          <svg
+            class="control-icon solid-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
             <rect x="4.75" y="6.15" width="1.95" height="11.7" rx="0.75"></rect>
             <path d="M18.6 6.9v10.2L11.75 12z"></path>
             <path d="M12.2 6.9v10.2L5.35 12z"></path>
@@ -251,18 +307,36 @@
           onclick={() => onTogglePlay?.()}
         >
           <span class="play-glyph" aria-hidden="true">
-            <svg class="control-icon play-icon play-icon-pause" viewBox="0 0 24 24">
-              <rect x="7.15" y="5.95" width="3.4" height="12.1" rx="1.25"></rect>
-              <rect x="13.45" y="5.95" width="3.4" height="12.1" rx="1.25"></rect>
+            <svg
+              class="control-icon play-icon play-icon-pause"
+              viewBox="0 0 24 24"
+            >
+              <rect x="7.15" y="5.95" width="3.4" height="12.1" rx="1.25"
+              ></rect>
+              <rect x="13.45" y="5.95" width="3.4" height="12.1" rx="1.25"
+              ></rect>
             </svg>
-            <svg class="control-icon play-icon play-icon-play" viewBox="0 0 24 24">
+            <svg
+              class="control-icon play-icon play-icon-play"
+              viewBox="0 0 24 24"
+            >
               <path d="M8.2 6.3v11.4L17.35 12z"></path>
             </svg>
           </span>
         </button>
 
-        <button type="button" class="icon-button transport-button" aria-label="下一首" disabled={!hasNext || isLoading} onclick={() => onNext?.()}>
-          <svg class="control-icon solid-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <button
+          type="button"
+          class="icon-button transport-button"
+          aria-label="下一首"
+          disabled={!hasNext || isLoading}
+          onclick={() => onNext?.()}
+        >
+          <svg
+            class="control-icon solid-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
             <rect x="17.3" y="6.15" width="1.95" height="11.7" rx="0.75"></rect>
             <path d="M5.4 6.9v10.2L12.25 12z"></path>
             <path d="M11.8 6.9v10.2L18.65 12z"></path>
@@ -296,10 +370,16 @@
       <div class="playback-stage">
         <div class="track-info">
           {#if resolvedCoverUrl}
-            <img src={resolvedCoverUrl} alt={`${song.name} 封面`} class="cover" />
+            <img
+              src={resolvedCoverUrl}
+              alt={`${song.name} 封面`}
+              class="cover"
+            />
           {:else}
             <div class="cover fallback" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 3v10.5a4 4 0 1 0 2 3.5V7h4V3h-6z"/></svg>
+              <svg viewBox="0 0 24 24"
+                ><path d="M12 3v10.5a4 4 0 1 0 2 3.5V7h4V3h-6z" /></svg
+              >
             </div>
           {/if}
 
@@ -345,7 +425,11 @@
         disabled={!song || isLoading || !onToggleLyrics}
         onclick={() => onToggleLyrics?.()}
       >
-        <svg class="control-icon stateful-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <svg
+          class="control-icon stateful-icon"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
           <path d="M5.5 7.25h13"></path>
           <path d="M5.5 11h13"></path>
           <path d="M5.5 14.75h9.5"></path>
@@ -364,7 +448,11 @@
         disabled={!song || isLoading || !onTogglePlaylist}
         onclick={() => onTogglePlaylist?.()}
       >
-        <svg class="control-icon stateful-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <svg
+          class="control-icon stateful-icon"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
           <path d="M5.25 7h9.5"></path>
           <path d="M5.25 11.5h9.5"></path>
           <path d="M5.25 16h6.75"></path>
@@ -384,7 +472,11 @@
         onclick={() => onDownload?.()}
       >
         {#if downloadState === 'creating'}
-          <svg class="control-icon spin-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <svg
+            class="control-icon spin-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
             <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
             <path d="M21 3v6h-6"></path>
           </svg>
@@ -453,12 +545,13 @@
       transform var(--motion-duration) var(--ease-standard);
   }
 
-  .am-player[data-panel="lyrics"],
-  .am-player[data-panel="playlist"] {
+  .am-player[data-panel='lyrics'],
+  .am-player[data-panel='playlist'] {
     box-shadow:
       0 18px 36px rgba(15, 23, 42, 0.14),
       0 8px 20px rgba(var(--accent-rgb), 0.1),
-      inset 0 1px 0 color-mix(in srgb, var(--surface-highlight) 90%, transparent);
+      inset 0 1px 0
+        color-mix(in srgb, var(--surface-highlight) 90%, transparent);
   }
 
   .left-controls {
@@ -523,7 +616,7 @@
       box-shadow var(--motion-duration) var(--ease-standard);
   }
 
-  .am-player[data-state="playing"] .cover {
+  .am-player[data-state='playing'] .cover {
     box-shadow:
       0 14px 28px rgba(16, 18, 28, 0.22),
       0 0 0 1px rgba(var(--accent-rgb), 0.12);
@@ -532,7 +625,11 @@
   .fallback {
     display: grid;
     place-items: center;
-    background: linear-gradient(145deg, var(--player-cover-start), var(--player-cover-end));
+    background: linear-gradient(
+      145deg,
+      var(--player-cover-start),
+      var(--player-cover-end)
+    );
     color: var(--player-placeholder-color);
   }
 
@@ -566,7 +663,11 @@
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: color-mix(in srgb, var(--surface) 72%, rgba(255, 255, 255, 0.14));
+    background: color-mix(
+      in srgb,
+      var(--surface) 72%,
+      rgba(255, 255, 255, 0.14)
+    );
     border: 1px solid rgba(255, 255, 255, 0.16);
     backdrop-filter: blur(12px) saturate(1.12);
     -webkit-backdrop-filter: blur(12px) saturate(1.12);
@@ -618,7 +719,7 @@
   .center-panel:focus-within .timeline,
   .timeline:hover,
   .timeline:focus-within,
-  .am-player[data-dragging="true"] .timeline {
+  .am-player[data-dragging='true'] .timeline {
     --thumb-scale: 1;
     --thumb-opacity: 1;
     --seek-track-size: 4px;
@@ -626,20 +727,20 @@
 
   .center-panel:hover .title,
   .center-panel:focus-within .title,
-  .am-player[data-dragging="true"] .title {
+  .am-player[data-dragging='true'] .title {
     color: color-mix(in srgb, var(--text-main) 92%, black);
   }
 
   .center-panel:hover .meta-stage::after,
   .center-panel:focus-within .meta-stage::after,
-  .am-player[data-dragging="true"] .meta-stage::after {
+  .am-player[data-dragging='true'] .meta-stage::after {
     opacity: 1;
     transform: scale(1);
   }
 
   .center-panel:hover .artist,
   .center-panel:focus-within .artist,
-  .am-player[data-dragging="true"] .artist {
+  .am-player[data-dragging='true'] .artist {
     opacity: 0.22;
   }
 
@@ -665,7 +766,7 @@
   .center-panel:focus-within .timeline-timebar,
   .timeline:hover .timeline-timebar,
   .timeline:focus-within .timeline-timebar,
-  .am-player[data-dragging="true"] .timeline-timebar {
+  .am-player[data-dragging='true'] .timeline-timebar {
     opacity: 1;
     transform: translateY(0);
   }
@@ -684,7 +785,7 @@
   .center-panel:focus-within .time,
   .timeline:hover .time,
   .timeline:focus-within .time,
-  .am-player[data-dragging="true"] .time {
+  .am-player[data-dragging='true'] .time {
     color: var(--text-main);
   }
 
@@ -758,7 +859,10 @@
     -webkit-appearance: none;
     width: calc(var(--seek-thumb-size) * var(--thumb-scale));
     height: calc(var(--seek-thumb-size) * var(--thumb-scale));
-    margin-top: calc((var(--seek-track-size) - (var(--seek-thumb-size) * var(--thumb-scale))) / 2);
+    margin-top: calc(
+      (var(--seek-track-size) - (var(--seek-thumb-size) * var(--thumb-scale))) /
+        2
+    );
     border-radius: 50%;
     border: 1.5px solid rgba(255, 255, 255, 0.92);
     background: color-mix(in srgb, var(--text-main) 92%, black);
@@ -875,7 +979,7 @@
   }
 
   .icon-button:hover:not(:disabled),
-  .icon-button[aria-pressed="true"] {
+  .icon-button[aria-pressed='true'] {
     background: rgba(var(--accent-rgb), 0.08);
     color: var(--icon-active);
     border-color: rgba(var(--accent-rgb), 0.08);
@@ -883,12 +987,12 @@
   }
 
   .icon-button:hover:not(:disabled)::before,
-  .icon-button[aria-pressed="true"]::before {
+  .icon-button[aria-pressed='true']::before {
     opacity: 1;
   }
 
-  .icon-button[aria-pressed="true"] .stateful-icon .toggle-badge,
-  .icon-button[aria-pressed="true"] .stateful-icon .toggle-mark {
+  .icon-button[aria-pressed='true'] .stateful-icon .toggle-badge,
+  .icon-button[aria-pressed='true'] .stateful-icon .toggle-mark {
     opacity: 1;
     transform: scale(1);
   }
@@ -1065,7 +1169,6 @@
     .time {
       font-size: 10px;
     }
-
   }
 
   @media (hover: none) {

@@ -13,12 +13,17 @@ This file provides guidance to Claude Code when working with this repository.
 ```bash
 bun install
 bun run tauri:dev
+bun run format
+bun run format:check
+bun run lint
+bun run check
 bun run build
 bun run tauri:build
 
-cargo check --workspace
 cargo fmt --all
+cargo check --workspace
 cargo clippy --workspace --all-targets
+cargo test --workspace
 
 # 文档
 cargo doc -p siren_core --no-deps
@@ -163,6 +168,7 @@ Cargo workspace
 
 - 后端“端点”指的是 Tauri command，不是 HTTP server route
 - 前端相关实现一律以 Svelte 5 为最高优先级：只要涉及新增前端代码、组件重构、状态组织、响应式写法、组合方式或语法选择，默认必须优先采用 Svelte 5 官方推荐模式；除非用户明确要求，否则不要为了延续旧习惯而主动回退到旧版写法或保守兼容模式
+- 前端代码与 Markdown 文档默认使用 Prettier 统一格式化；前端静态规则检查默认使用 ESLint；Rust 代码格式化默认使用 `cargo fmt --all`；`bun run check` 默认包含格式、lint、类型、前端构建与 `cargo check --workspace`，`cargo test --workspace` 需单独执行
 - 共享数据结构优先在 Rust 侧定义，再让前端 `types.ts` 保持形状一致
 - 所有对外暴露的 API 都必须编写函数文档，且文档内容统一使用中文；函数文档至少要说明用途、入参语义、出参/返回值语义以及关键副作用或错误场景；对于层级较高、承担入口职责的 API，还应补充说明适用场景、何时使用、使用注意事项与必要的调用约束；如涉及明确契约边界，还应写清前置条件、状态约束、不变量、是否幂等、是否允许重试等信息；从调用者视角出发，在有必要时补充返回数据的稳定性/兼容性预期、常见调用顺序与最小可用示例；新增或修改对外 API 时同步补齐或更新对应文档；在可行时尽量补充文档测试
 - 所有公开模块（尤其会进入 rustdoc 模块列表的 `pub mod`）都必须补充模块级 rustdoc，且文档内容统一使用中文；模块文档至少要概括该模块当前公开职责、主要暴露能力与典型使用场景，避免生成的模块列表只有名称没有说明；如果模块职责发生变化，要同步更新模块级 rustdoc，保证 rustdoc 首页、模块页与实际导出能力一致

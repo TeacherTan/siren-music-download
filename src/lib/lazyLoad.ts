@@ -3,10 +3,14 @@ import { getImageDataUrl } from './api';
 
 export function lazyLoad(
   node: HTMLElement,
-  { rootMargin = '150px', reducedMotion = false }: { rootMargin?: string; reducedMotion?: boolean } = {}
+  {
+    rootMargin = '150px',
+    reducedMotion = false,
+  }: { rootMargin?: string; reducedMotion?: boolean } = {}
 ) {
   let imageAnimation: { cancel?: () => void; stop?: () => void } | null = null;
-  let placeholderAnimation: { cancel?: () => void; stop?: () => void } | null = null;
+  let placeholderAnimation: { cancel?: () => void; stop?: () => void } | null =
+    null;
   let loadSeq = 0;
 
   const stopAnimations = () => {
@@ -30,7 +34,9 @@ export function lazyLoad(
         }
 
         const img = node.querySelector('img');
-        const placeholder = node.querySelector<HTMLElement>('.album-cover-placeholder');
+        const placeholder = node.querySelector<HTMLElement>(
+          '.album-cover-placeholder'
+        );
         if (!img) {
           observer.unobserve(node);
           return;

@@ -20,7 +20,7 @@ export function getImageMeta(image: HTMLImageElement): ImageMeta | null {
 }
 
 export function preloadImage(
-  src: string | null | undefined,
+  src: string | null | undefined
 ): Promise<ImageMeta | null> {
   if (!src) return Promise.resolve(null);
 
@@ -34,7 +34,7 @@ export function preloadImage(
       resolve(meta);
     };
 
-    image.decoding = "async";
+    image.decoding = 'async';
     image.onload = () => finish(getImageMeta(image));
     image.onerror = () => finish(null);
     image.src = src;
