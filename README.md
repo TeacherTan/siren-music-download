@@ -110,6 +110,15 @@ cargo doc -p siren-music-download --bin siren-music-download --no-deps --documen
 - [后端阶段记录](./doc/history/backend-completed-phases.md)
 - [后端增强路线](./doc/history/backend-pending-phases.md)
 
+## 开发指南
+
+- [Claude Code Hook 开发指引](./doc/guides/claude-code-hook-setup.md)
+- [前端开发指南](./doc/guides/frontend-guide.md)
+- [后端 API 契约](./doc/reference/backend-api-contract.md)
+- [Release 流程](./doc/process/release-process.md)
+- [评审规则](./doc/guides/review-rules.md)
+- [技术决策记录](./doc/history/decisions.md)
+
 ## 说明
 
 - 项目依赖塞壬唱片公开接口与公开资源；若上游接口或资源地址变化，应用也需要同步调整。
