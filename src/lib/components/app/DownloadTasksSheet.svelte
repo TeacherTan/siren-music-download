@@ -46,19 +46,19 @@
     ) => void | Promise<void>;
   }
 
-  const scopeOptions: Array<{
+  const scopeOptions: {
     value: DownloadHistoryScopeFilter;
     label: string;
-  }> = [
+  }[] = [
     { value: 'all', label: '全部范围' },
     { value: 'active', label: '仅进行中' },
     { value: 'history', label: '仅历史' },
   ];
 
-  const statusOptions: Array<{
+  const statusOptions: {
     value: DownloadHistoryStatusFilter;
     label: string;
-  }> = [
+  }[] = [
     { value: 'all', label: '全部状态' },
     { value: 'queued', label: '排队中' },
     { value: 'running', label: '下载中' },
@@ -68,10 +68,10 @@
     { value: 'cancelled', label: '已取消' },
   ];
 
-  const kindOptions: Array<{
+  const kindOptions: {
     value: DownloadHistoryKindFilter;
     label: string;
-  }> = [
+  }[] = [
     { value: 'all', label: '全部类型' },
     { value: 'song', label: '单曲下载' },
     { value: 'album', label: '整专下载' },

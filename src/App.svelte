@@ -249,8 +249,8 @@
     let activeIndex = -1;
 
     for (let index = 0; index < lyricsLines.length; index += 1) {
-      const lineTime = lyricsLines[index]?.time;
-      if (lineTime === null || lineTime === undefined) continue;
+      const lineTime = lyricsLines[index].time;
+      if (lineTime === null) continue;
       if (progress + 0.08 >= lineTime) {
         activeIndex = index;
       } else {
@@ -281,8 +281,7 @@
   async function preloadAlbumArtwork(
     album: AlbumDetail
   ): Promise<number | null> {
-    const sourceUrl = album.coverDeUrl ?? album.coverUrl ?? null;
-    if (!sourceUrl) return null;
+    const sourceUrl = album.coverDeUrl ?? album.coverUrl;
 
     const resolvedUrl = await getImageDataUrl(sourceUrl).catch(() => sourceUrl);
     const meta = await preloadImage(resolvedUrl);
@@ -461,20 +460,19 @@
   });
 
   $effect(() => {
-    settingsState.persistedSnapshot;
-    settingsState.isSaving;
-    settingsState.lastSaveFailedSnapshot;
-    if (!settingsState.prefsReady || settingsState.isSaving) {
+    const { persistedSnapshot, isSaving, lastSaveFailedSnapshot, prefsReady } =
+      settingsState;
+    if (!prefsReady || isSaving) {
       return;
     }
 
     const currentSnapshot = getSettingsSnapshot();
 
-    if (currentSnapshot === settingsState.persistedSnapshot) {
+    if (currentSnapshot === persistedSnapshot) {
       return;
     }
 
-    if (currentSnapshot === settingsState.lastSaveFailedSnapshot) {
+    if (currentSnapshot === lastSaveFailedSnapshot) {
       return;
     }
 
@@ -581,7 +579,7 @@
   }
 
   async function subscribeToTauriEvents(shouldDispose: () => boolean) {
-    const unlisteners: Array<() => void> = [];
+    const unlisteners: (() => void)[] = [];
 
     const cleanup = () => {
       while (unlisteners.length > 0) {
@@ -690,7 +688,9 @@
     } catch (error) {
       cleanup();
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`failed to subscribe tauri events: ${message}`);
+      throw new Error(`failed to subscribe tauri events: ${message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -719,6 +719,7 @@
     void (async () => {
       try {
         const nextUnsubscribe = await subscribeToTauriEvents(() => disposed);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- async race guard
         if (disposed) {
           nextUnsubscribe();
           return;
@@ -727,6 +728,7 @@
 
         await bootstrapApp(() => disposed);
       } catch (error) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- async race guard
         if (disposed) {
           return;
         }

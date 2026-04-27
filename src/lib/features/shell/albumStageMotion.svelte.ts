@@ -131,7 +131,7 @@ export function createAlbumStageMotionController(deps: AlbumStageMotionDeps) {
       return;
     }
 
-    const atTop = (contentElement.scrollTop ?? 0) <= 0.5;
+    const atTop = contentElement.scrollTop <= 0.5;
     if (!atTop) {
       return;
     }

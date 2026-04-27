@@ -9,6 +9,7 @@ import type {
   DownloadTaskSnapshot,
   OutputFormat,
 } from '$lib/types';
+import { SvelteMap } from 'svelte/reactivity';
 import { buildSelectionKey, formatByteSize, formatSpeed } from './formatters';
 import {
   hasCurrentDownloadOptions,
@@ -59,7 +60,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
   let scopeFilter = $state<DownloadHistoryScopeFilter>('all');
   let statusFilter = $state<DownloadHistoryStatusFilter>('all');
   let kindFilter = $state<DownloadHistoryKindFilter>('all');
-  let taskSpeedMap = $state<Map<string, number>>(new Map());
+  const taskSpeedMap = new SvelteMap<string, number>();
   let managerInitSeq = 0;
   let managerHydratedFromEvent = false;
 
@@ -98,10 +99,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
   function applyTaskProgress(event: DownloadTaskProgressEvent) {
     if (!manager) return;
 
-    taskSpeedMap = new Map(taskSpeedMap).set(
-      event.taskId,
-      event.speedBytesPerSec
-    );
+    taskSpeedMap.set(event.taskId, event.speedBytesPerSec);
 
     const jobIdx = manager.jobs.findIndex((job) => job.id === event.jobId);
     if (jobIdx < 0) return;
@@ -599,6 +597,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
   }
 
   function getSelectionJobAlbumCount(job: DownloadJobSnapshot): number {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
     return new Set(job.tasks.map((task) => task.albumCid)).size;
   }
 
@@ -616,7 +615,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     switch (job.kind) {
       case 'song': {
         const task = job.tasks[0];
-        return task?.albumName ? `来自《${task.albumName}》` : '单曲任务';
+        return task.albumName ? `来自《${task.albumName}》` : '单曲任务';
       }
       case 'album':
         return `${job.taskCount} 首歌曲`;
@@ -725,7 +724,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     scopeFilter = 'all';
     statusFilter = 'all';
     kindFilter = 'all';
-    taskSpeedMap = new Map();
+    taskSpeedMap.clear();
     managerInitSeq += 1;
     managerHydratedFromEvent = false;
   }

@@ -223,7 +223,7 @@
       }}
       transition={motionTransition}
     >
-      {(song.artists || []).join(', ')}
+      {song.artists.join(', ')}
     </motion.div>
     {#if showDownloadedBadge}
       <span class="song-download-badge">{downloadedBadgeLabel}</span>

@@ -27,7 +27,7 @@
     onSelectSearchResult: (item: SearchLibraryResultItem) => void;
   }
 
-  const scopeOptions: Array<{ value: LibrarySearchScope; label: string }> = [
+  const scopeOptions: { value: LibrarySearchScope; label: string }[] = [
     { value: 'all', label: '全部' },
     { value: 'albums', label: '专辑' },
     { value: 'songs', label: '歌曲' },

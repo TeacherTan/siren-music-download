@@ -17,5 +17,5 @@
 </script>
 
 <main class={contentClass}>
-  {@render children?.()}
+  {@render children()}
 </main>

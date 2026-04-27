@@ -603,7 +603,7 @@ class CacheManager {
         return [
           {
             key: String(key).replace(`${PERSISTENCE_KEY_PREFIX}albums:`, ''),
-            lastAccessedAt: value.lastAccessedAt ?? value.timestamp ?? 0,
+            lastAccessedAt: value.lastAccessedAt,
           },
         ];
       })

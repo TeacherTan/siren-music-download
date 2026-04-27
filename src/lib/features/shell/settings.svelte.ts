@@ -78,7 +78,7 @@ export function createSettingsController(deps: SettingsControllerDeps) {
         state.outputDir = prefs.outputDir || state.outputDir;
       }
       if (!state.dirty.format) {
-        state.format = prefs.outputFormat || state.format;
+        state.format = prefs.outputFormat;
       }
       if (!state.dirty.downloadLyrics) {
         state.downloadLyrics = prefs.downloadLyrics;

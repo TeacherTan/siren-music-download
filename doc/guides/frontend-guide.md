@@ -2,7 +2,7 @@
 
 > 前端架构、开发约定与验收基线的唯一主文档。
 >
-> 最后更新：2026-04-24
+> 最后更新：2026-04-27
 
 ## 1. 布局与主要组件
 
@@ -266,45 +266,102 @@ cleanup 时 teardownAppRuntime(...)
 
 1. 高频 progress 数据单独 `$state`，与 `jobs` 结构体拆开
 2. 结构变更（新增/删除 job、状态切换）走 `jobs = [...]` 重建
-3. 任务级字段更新允许细粒度 patch，但需用 `new Map(old).set(...)` 触发响应
+3. 任务级字段更新允许细粒度 patch，高频 `Map` 状态使用 `SvelteMap` 的 `.set()` / `.clear()` 触发响应
 
 ### 4.7 ESLint 收紧基线（2026-04）
 
 当前前端静态规则基线已收紧到以下状态：
 
-- `no-unused-vars`：`error`
+**基础设施：**
+
+- 启用 type-aware linting（`projectService` + `allowDefaultProject`），为 TS / Svelte / `.svelte.ts` 三个 block 提供完整类型信息
+- 拆分 browser / node globals：`src/` 下使用 `globals.browser + globals.es2025`，根目录配置文件（`eslint.config.js`、`vite.config.ts` 等）使用 `globals.node + globals.es2025`
+- Svelte 配置链追加 `flat/prettier`，避免 Svelte stylistic 规则与 Prettier 冲突
+- UI 组件库 `src/lib/components/ui/**` 对 `no-unnecessary-condition` 降级为 off（shadcn-svelte 生成代码的 `children?.()` / `value ?? 0` 是标准写法）
+
+**核心规则（全局生效）：**
+
+- `eqeqeq`：`error` — 强制严格相等
+- `no-console`：`error` — 禁止 console 调试输出
+- `no-var`：`error` — 禁止 var 声明
+- `prefer-const`：`error`（`.svelte` / `.svelte.ts` 中由 `svelte/prefer-const` 接管，理解 `$props()` / `$state()` 语义；`.svelte.ts` 额外排除 `$state` rune 以兼容模块级 store 惯用写法）
+- `no-array-constructor`：`error` — 禁止 `new Array()`
+- `prefer-template`：`error` — 强制模板字符串
+- `object-shorthand`：`error` — 强制对象简写
+- `no-useless-rename`：`error` — 禁止无意义解构重命名
+- `no-useless-computed-key`：`error` — 禁止无意义计算属性键
+- `no-useless-concat`：`error` — 禁止无意义字符串拼接
+- `no-lonely-if`：`error` — 禁止 else 块中孤立 if
+- `prefer-arrow-callback`：`error` — 回调优先箭头函数
+
+**TypeScript 增强（TS / Svelte / .svelte.ts）：**
+
 - `@typescript-eslint/no-unused-vars`：`error`
 - `@typescript-eslint/no-explicit-any`：`error`
+- `@typescript-eslint/no-non-null-asserted-nullish-coalescing`：`error`
+- `@typescript-eslint/no-useless-constructor`：`error`
+- `@typescript-eslint/consistent-type-assertions`：`error`
+- `@typescript-eslint/consistent-type-imports`：`error`（强制 `import type` 分离，利于 Vite tree-shaking）
+- `@typescript-eslint/consistent-generic-constructors`：`error`
+- `@typescript-eslint/no-inferrable-types`：`error`
+- `@typescript-eslint/prefer-for-of`：`error`
+- `@typescript-eslint/array-type`：`error`（统一 `T[]` 风格）
+
+**Type-aware 规则（需要完整类型信息）：**
+
+- `@typescript-eslint/no-floating-promises`：`error` — 禁止未处理的 Promise
+- `@typescript-eslint/no-misused-promises`：`error` — 禁止在非 Promise 上下文中误用 Promise
+- `@typescript-eslint/await-thenable`：`error` — 禁止 await 非 thenable 值
+- `@typescript-eslint/no-unnecessary-condition`：`error` — 禁止类型上不可能的条件分支
+- `@typescript-eslint/only-throw-error`：`error` — 只允许 throw Error 对象（替代 `no-throw-literal`，需要类型信息）
+
+**Svelte 专属：**
+
+- `svelte/prefer-const`：`error`（Svelte-aware 的 const 检查，理解 `$props` / `$state` 语义）
+- `no-unused-expressions` / `@typescript-eslint/no-unused-expressions`：`error`
+- `no-useless-assignment`：`error`
+- `no-unsafe-finally`：`error`
 - `svelte/no-unused-svelte-ignore`：`error`
+- `svelte/no-useless-children-snippet`：`error`
+- `svelte/prefer-svelte-reactivity`：`error`（默认启用）
+- `svelte/no-at-debug-tags`：`error`
+- `svelte/no-inspect`：`error`
+- `svelte/button-has-type`：`error`
+- `svelte/no-target-blank`：`error`
+- `svelte/spaced-html-comment`：`error`
+- `svelte/block-lang`：`error`（强制 `<script lang="ts">`）
 
 这意味着：
 
 1. 未使用的导入、局部变量与参数默认必须清理；确实需要保留的占位参数沿用 `_` 前缀约定
 2. 展示层与壳层组件中的 motion helper、事件桥接与缓存调用不得再用 `any` 兜底
-3. `svelte-ignore` 只能在确有必要时保留，且应优先通过改交互或补语义来消除 suppression
+3. 条件判断必须使用严格相等比较，避免通过 `==` / `!=` 引入隐式类型转换
+4. 前端实现不得引入 `console` 调试输出，也不得回退到 `var` 声明
+5. `svelte-ignore` 只能在确有必要时保留，且应优先通过改交互或补语义来消除 suppression
+6. Svelte `$effect` 中不得用裸表达式做依赖追踪；需要通过解构或显式读取到局部变量来保留依赖语义
+7. Svelte TS 中持久化响应式 `Map` / `Set` 状态应使用 `SvelteMap` / `SvelteSet`；仅临时集合可用局部 suppression 标明意图
+8. Svelte 文件中的 `finally` 代码块不得出现会覆盖原始控制流的返回、抛错或跳转写法
+9. Svelte 组件中的临时赋值与 snippet 组合必须保持必要性，避免保留无效中间赋值或无用子 snippet 包装
+10. 数组类型统一使用 `T[]` 风格，不使用 `Array<T>`
+11. 所有 Svelte 文件必须声明 `<script lang="ts">`，按钮元素必须显式声明 `type` 属性
+12. 不得在生产代码中保留 `@debug` 标签或 `$inspect` 调用
+13. 所有 Promise 必须被显式处理（`await` / `.then()` / `void`），不得出现悬浮 Promise
+14. 条件分支中不得出现类型上不可能到达的路径；async 竞态守卫等合法场景使用 `eslint-disable-next-line` 并注明原因
 
-本轮同时确认以下规则**暂不直接恢复**：
+**已确认的合法 suppress 场景：**
 
-- `no-unused-expressions`
-- `@typescript-eslint/no-unused-expressions`
-- `svelte/prefer-svelte-reactivity`
-
-原因如下：
-
-1. `*.svelte` 中存在 Svelte 5 `$effect` 依赖表达式写法；直接开启 `no-unused-expressions` 会误伤这类合法模式
-2. `*.svelte.ts` 中已有一批基于 `Map` / `Set` 的领域状态实现；直接开启 `svelte/prefer-svelte-reactivity` 会要求系统性迁移到 `SvelteMap` / `SvelteSet`，已经超出“渐进收紧兼容性关闭约束”的范围
-
-后续如果要继续推进最后一轮收紧，应遵循：
-
-1. 先把 `*.svelte` 中依赖表达式模式收口成 lint 可识别的写法，再评估是否恢复 `no-unused-expressions`
-2. 先为 `features/*.svelte.ts` 制定专门的 `Map` / `Set` 迁移方案，再评估是否恢复 `svelte/prefer-svelte-reactivity`
-3. 在恢复上述规则前，必须至少跑通 `bun run lint:eslint`、`bun run check:types`、`bun run check:svelte` 与 `bun run check:build`
+- `App.svelte` 中 `$effect` 内的 `if (disposed)` 竞态守卫：`await` 后检查闭包变量是否已被外部 cleanup 置位，类型系统无法追踪跨 `await` 的变量变化
+- `App.svelte` 中 Tauri `listen()` 的 async 回调：Tauri 运行时接受 async handler，但类型签名声明为 `void` 返回
+- `AudioPlayer.svelte` 中 optional `$props()` 回调的 falsy 检查：svelte-eslint-parser 对未提供默认值的 optional props 推断为 always `undefined`
+- `lyrics.ts` 中 optional regex capture group 的 `??` 守卫：`RegExpMatchArray` 索引访问类型为 `string`，但 optional group 运行时可为 `undefined`
 
 与本轮收紧直接相关的典型改动包括：
 
 - `AlbumCard.svelte` 改为原生可访问按钮语义，避免依赖 `svelte-ignore` 掩盖 a11y 问题
 - 各处 Svelte motion transition helper 统一使用 `MotionTransition`，不再以 `any` 返回
 - `cache.ts` / `api.ts` 通过判别联合与类型守卫收口缓存命中分支，减少调用层断言
+- `selectors.ts` 修正 `coverUrl` / `coverDeUrl` 的 fallback 顺序（`coverUrl` 为 `string` 非 nullable，`coverDeUrl` 为 `string | null`，应优先取 `coverDeUrl`）
+- 多处移除类型上不可能为 null/undefined 的冗余守卫（`artists || []`、`scrollTop ?? 0`、`outputFormat || state.format` 等）
 
 ## 5. IPC 规则
 

@@ -115,7 +115,7 @@
   </div>
   <div class="album-info">
     <div class="album-name">{album.name}</div>
-    <div class="album-artists">{(album.artists || []).join(', ')}</div>
+    <div class="album-artists">{album.artists.join(', ')}</div>
     {#if showDownloadBadge}
       <span class="album-download-badge">{downloadBadgeLabel}</span>
     {/if}

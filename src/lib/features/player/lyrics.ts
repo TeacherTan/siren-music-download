@@ -29,8 +29,9 @@ export function parseLyricText(source: string): LyricLine[] {
     }
 
     for (const match of matches) {
-      const minutes = Number(match[1] ?? 0);
-      const seconds = Number(match[2] ?? 0);
+      const minutes = Number(match[1]);
+      const seconds = Number(match[2]);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- regex group 3 is optional
       const fractionText = match[3] ?? '0';
       const fraction = Number(`0.${fractionText.padEnd(3, '0')}`);
       parsed.push({

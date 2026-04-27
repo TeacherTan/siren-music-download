@@ -109,7 +109,7 @@
     clamp(shownProgress / safeDuration, 0, 1)
   );
   const artistText = $derived.by(() =>
-    song?.artists?.length ? song.artists.join(' · ') : '未知艺术家'
+    song?.artists.length ? song.artists.join(' · ') : '未知艺术家'
   );
   const subtitle = $derived.by(() =>
     isLoading
@@ -132,6 +132,10 @@
   );
   const playlistButtonLabel = $derived.by(() =>
     playlistActive ? '关闭播放列表' : '打开播放列表'
+  );
+  const lyricsToggleDisabled = $derived(!song || isLoading || !onToggleLyrics);
+  const playlistToggleDisabled = $derived(
+    !song || isLoading || !onTogglePlaylist
   );
   const downloadButtonLabel = $derived.by(() => {
     if (!song) return '下载当前歌曲';
@@ -422,7 +426,7 @@
         class:panel-active={lyricsActive}
         aria-label={lyricsButtonLabel}
         aria-pressed={lyricsActive}
-        disabled={!song || isLoading || !onToggleLyrics}
+        disabled={lyricsToggleDisabled}
         onclick={() => onToggleLyrics?.()}
       >
         <svg
@@ -445,7 +449,7 @@
         class:panel-active={playlistActive}
         aria-label={playlistButtonLabel}
         aria-pressed={playlistActive}
-        disabled={!song || isLoading || !onTogglePlaylist}
+        disabled={playlistToggleDisabled}
         onclick={() => onTogglePlaylist?.()}
       >
         <svg

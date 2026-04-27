@@ -121,8 +121,9 @@ export function createLibraryController(deps: LibraryControllerDeps) {
       };
       deps.notifyError(`搜索失败：${message}`);
     } finally {
-      if (requestSeq !== librarySearchRequestSeq) return;
-      librarySearchLoading = false;
+      if (requestSeq === librarySearchRequestSeq) {
+        librarySearchLoading = false;
+      }
     }
   }
 
@@ -209,14 +210,16 @@ export function createLibraryController(deps: LibraryControllerDeps) {
       if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
       errorMsg = error instanceof Error ? error.message : String(error);
     } finally {
-      if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
-      const elapsed = Date.now() - startTime;
-      if (elapsed < deps.minDetailDisplayMs) {
-        await deps.delay(deps.minDetailDisplayMs - elapsed);
+      if (!shouldDispose?.() && requestSeq === albumRequestSeq) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed < deps.minDetailDisplayMs) {
+          await deps.delay(deps.minDetailDisplayMs - elapsed);
+        }
+        if (!shouldDispose?.() && requestSeq === albumRequestSeq) {
+          clearDetailSkeleton();
+          loadingDetail = false;
+        }
       }
-      if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
-      clearDetailSkeleton();
-      loadingDetail = false;
     }
   }
 
@@ -272,9 +275,10 @@ export function createLibraryController(deps: LibraryControllerDeps) {
         `刷新当前专辑失败：${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
-      if (shouldDispose?.() || requestSeq !== albumRequestSeq) return;
-      clearDetailSkeleton();
-      loadingDetail = false;
+      if (!shouldDispose?.() && requestSeq === albumRequestSeq) {
+        clearDetailSkeleton();
+        loadingDetail = false;
+      }
     }
   }
 
