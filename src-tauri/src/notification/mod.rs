@@ -7,14 +7,39 @@ mod desktop;
 mod macos;
 
 use crate::app_state::AppState;
+use crate::i18n::{fluent_args, tr, tr_args};
 use crate::logging::{LogLevel, LogPayload};
 use crate::player::state::PlayerState;
 use siren_core::download::model::{DownloadJobKind, DownloadJobSnapshot, DownloadJobStatus};
+use std::collections::HashSet;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 /// 记录最近一次已发送播放通知的歌曲 CID，用于避免同一首歌重复通知。
 static LAST_NOTIFIED_SONG: Mutex<Option<String>> = Mutex::new(None);
+
+fn selection_notification_title(
+    job: &DownloadJobSnapshot,
+    locale: crate::preferences::Locale,
+) -> String {
+    let album_count = job
+        .tasks
+        .iter()
+        .map(|t| t.album_cid.as_str())
+        .collect::<HashSet<_>>()
+        .len();
+    let count = job.task_count;
+    if album_count > 1 {
+        let args = fluent_args!(
+            "count" => count as i64,
+            "albumCount" => album_count as i64
+        );
+        tr_args(locale, "notification-selection-title-cross-albums", &args)
+    } else {
+        let args = fluent_args!("count" => count as i64);
+        tr_args(locale, "notification-selection-title", &args)
+    }
+}
 
 /// 当下载批次进入终态时触发系统通知。
 ///
@@ -34,17 +59,28 @@ pub fn notify_download_completed(app: &AppHandle, job: &DownloadJobSnapshot) {
         return;
     }
 
+    let locale = prefs.locale;
+
     let (title, body) = match job.kind {
-        DownloadJobKind::Song => (job.title.clone(), "下载完成".to_string()),
+        DownloadJobKind::Song => (
+            job.title.clone(),
+            tr(locale, "notification-download-completed"),
+        ),
         DownloadJobKind::Album | DownloadJobKind::Selection => {
-            let title = job.title.clone();
-            let body = if job.status == DownloadJobStatus::PartiallyFailed {
-                format!(
-                    "专辑下载完成（{} 首成功，{} 首失败）",
-                    job.completed_task_count, job.failed_task_count
-                )
+            let title = if job.kind == DownloadJobKind::Selection {
+                selection_notification_title(job, locale)
             } else {
-                format!("专辑下载完成（{} 首歌曲）", job.completed_task_count)
+                job.title.clone()
+            };
+            let body = if job.status == DownloadJobStatus::PartiallyFailed {
+                let args = fluent_args!(
+                    "completed" => job.completed_task_count as i64,
+                    "failed" => job.failed_task_count as i64
+                );
+                tr_args(locale, "notification-album-partial", &args)
+            } else {
+                let args = fluent_args!("count" => job.completed_task_count as i64);
+                tr_args(locale, "notification-album-completed", &args)
             };
             (title, body)
         }
@@ -79,7 +115,7 @@ pub fn notify_download_completed(app: &AppHandle, job: &DownloadJobSnapshot) {
 
 /// 当播放切换到新歌曲时触发系统通知。
 ///
-/// 通知标题为歌曲名、正文为艺术家列表，并会按“最近一次已通知的歌曲 CID”做去重，
+/// 通知标题为歌曲名、正文为艺术家列表，并会按"最近一次已通知的歌曲 CID"做去重，
 /// 以避免同一首歌在连续播放状态更新中被重复通知。
 pub fn notify_playback_changed(app: &AppHandle, player_state: &PlayerState) {
     let app_state = app.state::<AppState>();
@@ -165,9 +201,16 @@ pub fn notify_playback_changed(app: &AppHandle, player_state: &PlayerState) {
 
 /// 发送一条测试通知，用于验证通知链路是否可用。
 pub fn notify_test(app: AppHandle) -> Result<(), String> {
+    let locale = app
+        .try_state::<AppState>()
+        .map(|s| s.preferences().locale)
+        .unwrap_or_default();
+    let title = tr(locale, "notification-test-title");
+    let body = tr(locale, "notification-test-body");
+
     #[cfg(target_os = "macos")]
     {
-        let result = macos::show_test(&app);
+        let result = macos::show_test(&app, &title, &body);
         if let Err(error) = &result {
             if let Some(state) = app.try_state::<AppState>() {
                 state.log_center.record(
@@ -186,7 +229,7 @@ pub fn notify_test(app: AppHandle) -> Result<(), String> {
 
     #[cfg(not(target_os = "macos"))]
     {
-        let result = desktop::show_test(&app);
+        let result = desktop::show_test(&app, &title, &body);
         if let Err(error) = &result {
             if let Some(state) = app.try_state::<AppState>() {
                 state.log_center.record(

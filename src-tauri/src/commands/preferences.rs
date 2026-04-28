@@ -31,10 +31,11 @@ pub async fn set_preferences(
     state: State<'_, AppState>,
     preferences: AppPreferences,
 ) -> Result<AppPreferences, String> {
-    preferences.validate()?;
+    let locale = preferences.locale;
+    preferences.validate(locale)?;
     let previous = state.preferences();
     let store = state.preferences_store();
-    store.save(&preferences)?;
+    store.save(&preferences, locale)?;
     state.set_preferences(preferences.clone());
     if previous.output_dir != preferences.output_dir {
         spawn_inventory_scan(
@@ -58,8 +59,9 @@ pub async fn export_preferences(
     output_path: String,
 ) -> Result<AppPreferences, String> {
     let prefs = state.preferences();
+    let locale = prefs.locale;
     let store = state.preferences_store();
-    store.export_to(&prefs, Path::new(&output_path))?;
+    store.export_to(&prefs, Path::new(&output_path), locale)?;
     Ok(prefs)
 }
 
@@ -75,9 +77,10 @@ pub async fn import_preferences(
     input_path: String,
 ) -> Result<AppPreferences, String> {
     let previous = state.preferences();
+    let locale = previous.locale;
     let store = state.preferences_store();
-    let imported = store.import_from(Path::new(&input_path))?;
-    store.save(&imported)?;
+    let imported = store.import_from(Path::new(&input_path), locale)?;
+    store.save(&imported, locale)?;
     state.set_preferences(imported.clone());
     if previous.output_dir != imported.output_dir {
         spawn_inventory_scan(
@@ -90,7 +93,6 @@ pub async fn import_preferences(
     Ok(imported)
 }
 
-// 以下两个保留（系统状态，非偏好）
 /// 获取通知权限状态字符串。
 ///
 /// 适用于设置面板展示当前系统通知授权状态，或在发送测试通知前决定是否提示用户授权。

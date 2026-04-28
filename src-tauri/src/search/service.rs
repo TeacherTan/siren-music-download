@@ -195,7 +195,10 @@ impl LibrarySearchService {
                             "library_search.snapshot_build_failed",
                             "Failed to build search snapshot",
                         )
-                        .user_message("搜索索引构建失败")
+                        .user_message(crate::i18n::tr(
+                            crate::preferences::Locale::default(),
+                            "search-index-build-failed",
+                        ))
                         .details(error.to_string()),
                     );
                     service
@@ -227,7 +230,10 @@ impl LibrarySearchService {
                             "library_search.index_build_failed",
                             "Failed to build search index",
                         )
-                        .user_message("搜索索引构建失败")
+                        .user_message(crate::i18n::tr(
+                            crate::preferences::Locale::default(),
+                            "search-index-build-failed",
+                        ))
                         .details(error.to_string()),
                     );
                     service
@@ -247,7 +253,10 @@ impl LibrarySearchService {
                             "library_search.index_build_join_failed",
                             "Search index build worker failed",
                         )
-                        .user_message("搜索索引构建失败")
+                        .user_message(crate::i18n::tr(
+                            crate::preferences::Locale::default(),
+                            "search-index-build-failed",
+                        ))
                         .details(error.to_string()),
                     );
                     service

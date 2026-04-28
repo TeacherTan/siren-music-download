@@ -358,10 +358,16 @@ pub(crate) fn sanitize_search_request(
 ) -> Result<SanitizedSearchRequest> {
     let query = request.query.trim().to_string();
     if query.is_empty() {
-        anyhow::bail!("搜索关键词不能为空");
+        anyhow::bail!(crate::i18n::tr(
+            crate::preferences::Locale::default(),
+            "search-query-empty"
+        ));
     }
     if query.chars().count() > siren_core::SEARCH_LIBRARY_QUERY_MAX_LENGTH {
-        anyhow::bail!("搜索关键词长度不能超过 128 个字符");
+        anyhow::bail!(crate::i18n::tr(
+            crate::preferences::Locale::default(),
+            "search-query-too-long"
+        ));
     }
 
     Ok(SanitizedSearchRequest {

@@ -36,6 +36,7 @@ mod audio_cache;
 pub mod commands;
 mod download_session;
 mod downloads;
+mod i18n;
 mod local_inventory;
 mod local_inventory_provenance;
 mod logging;

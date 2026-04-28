@@ -1092,6 +1092,7 @@
       getJobStatusLabel={downloadController.getJobStatusLabel}
       getJobKindLabel={downloadController.getJobKindLabel}
       getJobSummaryLabel={downloadController.getJobSummaryLabel}
+      getJobDisplayTitle={downloadController.getJobDisplayTitle}
       getJobErrorSummary={downloadController.getJobErrorSummary}
       isJobActive={downloadController.isJobActive}
       canCancelTask={downloadController.canCancelTask}

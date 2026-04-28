@@ -216,5 +216,7 @@
   "shell_error_open_downloads_failed": "打开下载任务面板失败：{error}",
   "library_error_search_failed": "搜索失败：{error}",
   "library_error_refresh_album_failed": "刷新当前专辑失败：{error}",
-  "library_album_stage_default_name": "专辑"
+  "library_album_stage_default_name": "专辑",
+  "download_job_selection_title": "已选 {count} 首",
+  "download_job_selection_title_cross_albums": "已选 {count} 首 · {albumCount} 张专辑"
 }

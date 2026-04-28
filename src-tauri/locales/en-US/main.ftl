@@ -1,0 +1,59 @@
+## System notifications
+
+notification-download-completed = Download completed
+notification-album-completed = Album download completed ({ $count } songs)
+notification-album-partial = Album download completed ({ $completed } succeeded, { $failed } failed)
+notification-test-title = Test Notification
+notification-test-body = Siren Music Downloader notification is working.
+notification-selection-title = { $count } songs selected
+notification-selection-title-cross-albums = { $count } songs selected · { $albumCount } albums
+
+## Preferences validation
+
+preferences-unsupported-format = Unsupported format: { $format }
+preferences-unsupported-log-level = Unsupported log level: { $level }
+preferences-output-dir-must-be-absolute = Output path must be an absolute directory path
+preferences-output-dir-not-exists = Output path does not exist
+preferences-output-dir-is-symlink = Output path cannot be a symlink
+preferences-output-dir-not-directory = Output path is not a directory
+preferences-export-path-must-be-absolute = Export path must be an absolute file path
+preferences-export-path-is-symlink = Export path cannot be a symlink
+preferences-export-path-is-directory = Export path must be a file path
+preferences-import-path-must-be-absolute = Import path must be an absolute file path
+preferences-import-file-not-exists = Import file does not exist
+preferences-import-path-is-symlink = Import path cannot be a symlink
+preferences-import-path-not-file = Import path must be a file
+
+## Preferences persistence
+
+preferences-dir-invalid = Preferences directory is invalid
+preferences-dir-create-failed = Failed to create preferences directory
+preferences-file-write-failed = Failed to write preferences file
+preferences-export-dir-create-failed = Failed to create export directory
+preferences-export-file-write-failed = Failed to write export file
+preferences-import-file-read-failed = Failed to read import file
+preferences-load-invalid = Preferences are invalid, reverted to defaults
+preferences-load-corrupted = Preferences are corrupted, reverted to defaults
+preferences-load-read-failed = Failed to read preferences, reverted to defaults
+
+## Download session
+
+download-session-read-failed = Failed to read download history, reverted to empty state
+download-session-parse-failed = Download history is corrupted, reverted to empty state
+download-session-schema-incompatible = Download history version is incompatible, reverted to empty state
+download-session-dir-invalid = Download session directory is invalid
+download-session-save-failed = Failed to save download history
+
+## Local inventory
+
+inventory-output-dir-not-directory = outputDir is not a directory
+inventory-read-dir-failed = Failed to read directory
+inventory-enumerate-dir-failed = Failed to enumerate directory
+inventory-read-metadata-failed = Failed to read file metadata
+inventory-read-audio-failed = Failed to read audio file
+
+## Search
+
+search-query-empty = Search query cannot be empty
+search-query-too-long = Search query cannot exceed 128 characters
+search-index-build-failed = Failed to build search index

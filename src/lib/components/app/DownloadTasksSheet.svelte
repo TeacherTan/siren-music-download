@@ -32,6 +32,7 @@
     getJobStatusLabel: (job: DownloadJobSnapshot) => string;
     getJobKindLabel: (job: DownloadJobSnapshot) => string;
     getJobSummaryLabel: (job: DownloadJobSnapshot) => string;
+    getJobDisplayTitle: (job: DownloadJobSnapshot) => string;
     getJobErrorSummary: (job: DownloadJobSnapshot) => string | null;
     isJobActive: (jobId: string) => boolean;
     canCancelTask: (task: DownloadTaskSnapshot) => boolean;
@@ -64,6 +65,7 @@
     getJobStatusLabel,
     getJobKindLabel,
     getJobSummaryLabel,
+    getJobDisplayTitle,
     getJobErrorSummary,
     isJobActive,
     canCancelTask,
@@ -253,7 +255,7 @@
                       >{kindLabel}</Badge
                     ><span class="download-status-pill">{statusLabel}</span>
                   </div>
-                  <h3>{job.title}</h3>
+                  <h3>{getJobDisplayTitle(job)}</h3>
                   <p>{summaryLabel}</p>
                 </div>
                 <div class="download-job-actions">

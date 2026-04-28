@@ -62,12 +62,12 @@ pub fn show_download(app: &AppHandle, title: &str, body: &str) -> Result<(), Str
     Ok(())
 }
 
-pub fn show_test(app: &AppHandle) -> Result<(), String> {
+pub fn show_test(app: &AppHandle, title: &str, body: &str) -> Result<(), String> {
     set_app_identity(app)?;
 
     Notification::new()
-        .summary("测试通知")
-        .body("塞壬音乐下载器通知功能正常。")
+        .summary(title)
+        .body(body)
         .show()
         .map_err(|error| format!("show test failed: {error}"))?;
     Ok(())

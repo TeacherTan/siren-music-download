@@ -59,7 +59,10 @@ impl DownloadSessionStore {
                     log_center,
                     "download_session.read_failed",
                     "Failed to read persisted download session",
-                    "下载历史读取失败，已回退为空状态",
+                    &crate::i18n::tr(
+                        crate::preferences::Locale::default(),
+                        "download-session-read-failed",
+                    ),
                     error.to_string(),
                 );
                 return LoadedDownloadSession {
@@ -83,7 +86,10 @@ impl DownloadSessionStore {
                     log_center,
                     "download_session.parse_failed",
                     "Failed to parse persisted download session",
-                    "下载历史已损坏，已回退为空状态",
+                    &crate::i18n::tr(
+                        crate::preferences::Locale::default(),
+                        "download-session-parse-failed",
+                    ),
                     error.to_string(),
                 );
                 return LoadedDownloadSession {
@@ -98,7 +104,10 @@ impl DownloadSessionStore {
                 log_center,
                 "download_session.unsupported_schema",
                 "Unsupported persisted download session schema version",
-                "下载历史版本不兼容，已回退为空状态",
+                &crate::i18n::tr(
+                    crate::preferences::Locale::default(),
+                    "download-session-schema-incompatible",
+                ),
                 format!(
                     "expected schema {}, got {}",
                     DOWNLOAD_SESSION_SCHEMA_VERSION, persisted.schema_version
@@ -123,7 +132,12 @@ impl DownloadSessionStore {
     pub(crate) fn save(&self, snapshot: &DownloadManagerSnapshot) -> Result<(), String> {
         let _guard = self.save_lock.lock().map_err(|error| error.to_string())?;
 
-        let parent = self.path.parent().ok_or("下载 session 目录无效")?;
+        let parent = self.path.parent().ok_or_else(|| {
+            crate::i18n::tr(
+                crate::preferences::Locale::default(),
+                "download-session-dir-invalid",
+            )
+        })?;
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
 
         let persisted = PersistedDownloadSession {

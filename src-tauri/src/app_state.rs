@@ -150,7 +150,10 @@ impl AppState {
                     "download_session.write_failed",
                     "Failed to persist download session",
                 )
-                .user_message("下载历史保存失败")
+                .user_message(crate::i18n::tr(
+                    self.preferences().locale,
+                    "download-session-save-failed",
+                ))
                 .details(error),
             );
         }

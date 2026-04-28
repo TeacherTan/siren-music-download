@@ -32,11 +32,11 @@ pub fn show_download(app: &AppHandle, title: String, body: String) -> Result<(),
     Ok(())
 }
 
-pub fn show_test(app: &AppHandle) -> Result<(), String> {
+pub fn show_test(app: &AppHandle, title: &str, body: &str) -> Result<(), String> {
     app.notification()
         .builder()
-        .title("测试通知")
-        .body("塞壬音乐下载器通知功能正常。")
+        .title(title)
+        .body(body)
         .show()
         .map_err(|error| error.to_string())?;
 

@@ -43,6 +43,7 @@
     getJobStatusLabel: (job: DownloadJobSnapshot) => string;
     getJobKindLabel: (job: DownloadJobSnapshot) => string;
     getJobSummaryLabel: (job: DownloadJobSnapshot) => string;
+    getJobDisplayTitle: (job: DownloadJobSnapshot) => string;
     getJobErrorSummary: (job: DownloadJobSnapshot) => string | null;
     isJobActive: (jobId: string) => boolean;
     canCancelTask: (task: DownloadTaskSnapshot) => boolean;
@@ -90,6 +91,7 @@
     getJobStatusLabel,
     getJobKindLabel,
     getJobSummaryLabel,
+    getJobDisplayTitle,
     getJobErrorSummary,
     isJobActive,
     canCancelTask,
@@ -136,6 +138,7 @@
     {getJobStatusLabel}
     {getJobKindLabel}
     {getJobSummaryLabel}
+    {getJobDisplayTitle}
     {getJobErrorSummary}
     {isJobActive}
     {canCancelTask}

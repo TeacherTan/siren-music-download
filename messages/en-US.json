@@ -216,5 +216,7 @@
   "shell_error_open_downloads_failed": "Failed to open downloads panel: {error}",
   "library_error_search_failed": "Search failed: {error}",
   "library_error_refresh_album_failed": "Failed to refresh current album: {error}",
-  "library_album_stage_default_name": "Album"
+  "library_album_stage_default_name": "Album",
+  "download_job_selection_title": "{count} songs selected",
+  "download_job_selection_title_cross_albums": "{count} songs selected · {albumCount} albums"
 }

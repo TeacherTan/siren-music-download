@@ -304,7 +304,10 @@ fn collect_local_audio_evidence(
     }
 
     if !root_output_dir.is_dir() {
-        return Err("outputDir 不是目录".to_string());
+        return Err(crate::i18n::tr(
+            crate::preferences::Locale::default(),
+            "inventory-output-dir-not-directory",
+        ));
     }
 
     let mut audio_files = Vec::new();
@@ -364,9 +367,19 @@ fn visit_directory(
     on_file: &mut impl FnMut(&Path) -> Result<(), String>,
 ) -> Result<bool, String> {
     let mut entries = std::fs::read_dir(current_path)
-        .map_err(|_| "读取目录失败".to_string())?
+        .map_err(|_| {
+            crate::i18n::tr(
+                crate::preferences::Locale::default(),
+                "inventory-read-dir-failed",
+            )
+        })?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| "枚举目录失败".to_string())?;
+        .map_err(|_| {
+            crate::i18n::tr(
+                crate::preferences::Locale::default(),
+                "inventory-enumerate-dir-failed",
+            )
+        })?;
     entries.sort_by_key(|entry| entry.path());
 
     for entry in entries {
@@ -375,8 +388,12 @@ fn visit_directory(
         }
 
         let path = entry.path();
-        let metadata =
-            std::fs::symlink_metadata(&path).map_err(|_| "读取文件元信息失败".to_string())?;
+        let metadata = std::fs::symlink_metadata(&path).map_err(|_| {
+            crate::i18n::tr(
+                crate::preferences::Locale::default(),
+                "inventory-read-metadata-failed",
+            )
+        })?;
 
         if metadata.file_type().is_symlink() {
             continue;
@@ -401,7 +418,12 @@ fn build_audio_file_evidence(
     relative_path: String,
     provenance_records: &[LocalInventoryProvenanceRecord],
 ) -> Result<LocalAudioFileEvidence, String> {
-    let metadata = std::fs::metadata(path).map_err(|_| "读取文件元信息失败".to_string())?;
+    let metadata = std::fs::metadata(path).map_err(|_| {
+        crate::i18n::tr(
+            crate::preferences::Locale::default(),
+            "inventory-read-metadata-failed",
+        )
+    })?;
     let parent = path
         .parent()
         .and_then(|dir| dir.strip_prefix(root_output_dir).ok());
@@ -454,7 +476,12 @@ fn resolve_verification_state(
 }
 
 fn checksum_path(path: &Path) -> Result<String, String> {
-    let bytes = std::fs::read(path).map_err(|_| "读取音频文件失败".to_string())?;
+    let bytes = std::fs::read(path).map_err(|_| {
+        crate::i18n::tr(
+            crate::preferences::Locale::default(),
+            "inventory-read-audio-failed",
+        )
+    })?;
     Ok(format!("{:x}", md5::compute(bytes)))
 }
 

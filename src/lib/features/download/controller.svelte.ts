@@ -667,6 +667,20 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     }
   }
 
+  function getJobDisplayTitle(job: DownloadJobSnapshot): string {
+    if (job.kind !== 'selection') {
+      return job.title;
+    }
+    const albumCount = getSelectionJobAlbumCount(job);
+    if (albumCount > 1) {
+      return m.download_job_selection_title_cross_albums({
+        count: job.taskCount,
+        albumCount,
+      });
+    }
+    return m.download_job_selection_title({ count: job.taskCount });
+  }
+
   function isJobActive(jobId: string): boolean {
     return manager?.activeJobId === jobId;
   }
@@ -844,6 +858,7 @@ export function createDownloadController(deps: DownloadControllerDeps) {
     getTaskStatusLabel,
     getJobKindLabel,
     getJobSummaryLabel,
+    getJobDisplayTitle,
     isJobActive,
     canCancelTask,
     canRetryTask,
