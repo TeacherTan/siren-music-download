@@ -215,14 +215,14 @@
 
 <Sheet.Root bind:open>
   <Sheet.Content
-    class="app-side-sheet settings-sheet gap-0 overflow-hidden border-[var(--settings-border)] bg-[var(--surface-sheet)] p-0 text-[var(--text-primary)] shadow-[0_24px_64px_rgba(15,23,42,0.18)] backdrop-blur-xl"
+    class="app-side-sheet settings-sheet gap-0 overflow-hidden border-[var(--sheet-border)] bg-[var(--surface-sheet)] p-0 text-[var(--text-primary)] shadow-[0_24px_64px_rgba(15,23,42,0.18)] backdrop-blur-xl"
   >
-    <Sheet.Header class="settings-sheet-header">
+    <Sheet.Header class="sheet-header settings-sheet-header">
       <Sheet.Title>{labels.title}</Sheet.Title>
       <Sheet.Description>{labels.description}</Sheet.Description>
     </Sheet.Header>
-    <div class="settings-sheet-body">
-      <section class="settings-section">
+    <div class="sheet-body">
+      <section class="sheet-section settings-section">
         <div class="settings-section-heading">
           <h3>{labels.sectionPreferences}</h3>
         </div>
@@ -232,9 +232,9 @@
             <Select.Root type="single" bind:value={locale}
               ><Select.Trigger
                 id="locale-select"
-                class="h-9 w-full border-[var(--settings-border)] bg-[var(--settings-control-bg)]"
+                class="sheet-select-trigger h-9 w-full border-[var(--sheet-border)]"
                 >{currentLocaleLabel}</Select.Trigger
-              ><Select.Content
+              ><Select.Content class="sheet-select-content"
                 >{#each localeOptions as option (option.value)}<Select.Item
                     value={option.value}
                     label={option.label}
@@ -247,9 +247,9 @@
             <Select.Root type="single" bind:value={format}
               ><Select.Trigger
                 id="format-select"
-                class="h-9 w-full border-[var(--settings-border)] bg-[var(--settings-control-bg)]"
+                class="sheet-select-trigger h-9 w-full border-[var(--sheet-border)]"
                 >{currentFormatLabel}</Select.Trigger
-              ><Select.Content
+              ><Select.Content class="sheet-select-content"
                 >{#each formatOptions as option (option.value)}<Select.Item
                     value={option.value}
                     label={option.label}
@@ -262,9 +262,9 @@
             <Select.Root type="single" bind:value={logLevel}
               ><Select.Trigger
                 id="log-level-select"
-                class="h-9 w-full border-[var(--settings-border)] bg-[var(--settings-control-bg)]"
+                class="sheet-select-trigger h-9 w-full border-[var(--sheet-border)]"
                 >{currentLogLevelLabel}</Select.Trigger
-              ><Select.Content
+              ><Select.Content class="sheet-select-content"
                 >{#each logLevelOptions as option (option.value)}<Select.Item
                     value={option.value}
                     label={option.label}
@@ -277,7 +277,7 @@
             <div class="settings-path-row">
               <Input
                 id="output-dir"
-                class="h-9 border-[var(--settings-border)] bg-[var(--settings-control-bg)]"
+                class="h-9 border-[var(--sheet-border)] bg-[var(--sheet-control-bg)]"
                 readonly
                 value={outputDir}
               />
@@ -292,7 +292,7 @@
           </div>
         </div>
       </section>
-      <section class="settings-section">
+      <section class="sheet-section settings-section">
         <div class="settings-section-heading">
           <h3>{labels.sectionNotifications}</h3>
           <Button
@@ -344,7 +344,7 @@
           >
         </div>
       </section>
-      <section class="settings-section">
+      <section class="sheet-section settings-section">
         <div class="settings-section-heading settings-log-heading">
           <div>
             <h3>{labels.sectionLogs}</h3>
@@ -404,50 +404,8 @@
 </Sheet.Root>
 
 <style>
-  :global(.settings-sheet) {
-    --settings-border: color-mix(in srgb, var(--border) 78%, white 22%);
-    --settings-section-bg: color-mix(
-      in srgb,
-      var(--bg-secondary) 76%,
-      transparent
-    );
-    --settings-control-bg: color-mix(
-      in srgb,
-      var(--bg-primary) 54%,
-      transparent
-    );
-    --settings-row-bg: color-mix(in srgb, var(--bg-primary) 42%, transparent);
-    --settings-row-hover-bg: color-mix(
-      in srgb,
-      var(--bg-primary) 56%,
-      transparent
-    );
-  }
-  :global(.settings-sheet-header) {
-    padding: 18px 48px 14px 18px;
-    border-bottom: 1px solid var(--settings-border);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-tint-strong) 72%, transparent),
-      transparent
-    );
-  }
-  .settings-sheet-body {
-    display: flex;
-    min-height: 0;
-    flex: 1;
-    flex-direction: column;
-    gap: 12px;
-    overflow-y: auto;
-    padding: 14px 14px 18px;
-  }
   .settings-section {
-    display: grid;
     gap: 12px;
-    border: 1px solid var(--settings-border);
-    border-radius: 8px;
-    background: var(--settings-section-bg);
-    padding: 12px;
   }
   .settings-section-heading {
     display: flex;
@@ -488,7 +446,7 @@
   .settings-toggle-list {
     display: grid;
     overflow: hidden;
-    border: 1px solid var(--settings-border);
+    border: 1px solid var(--sheet-border);
     border-radius: 8px;
   }
   .settings-toggle {
@@ -498,15 +456,15 @@
     gap: 16px;
     min-height: 58px;
     padding: 10px 12px;
-    background: var(--settings-row-bg);
+    background: var(--sheet-row-bg);
     cursor: pointer;
     transition: background var(--motion-fast) var(--ease-standard);
   }
   .settings-toggle + .settings-toggle {
-    border-top: 1px solid var(--settings-border);
+    border-top: 1px solid var(--sheet-border);
   }
   .settings-toggle:hover {
-    background: var(--settings-row-hover-bg);
+    background: var(--sheet-row-hover-bg);
   }
   .settings-toggle span {
     display: grid;
@@ -533,9 +491,9 @@
     display: inline-grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     overflow: hidden;
-    border: 1px solid var(--settings-border);
+    border: 1px solid var(--sheet-border);
     border-radius: 8px;
-    background: var(--settings-row-bg);
+    background: var(--sheet-row-bg);
     padding: 2px;
   }
   .settings-segment button {
@@ -567,15 +525,15 @@
     gap: 8px;
     max-height: 240px;
     overflow-y: auto;
-    border: 1px solid var(--settings-border);
+    border: 1px solid var(--sheet-border);
     border-radius: 8px;
-    background: var(--settings-row-bg);
+    background: var(--sheet-row-bg);
     padding: 8px;
   }
   .settings-log-record {
     display: grid;
     gap: 4px;
-    border: 1px solid var(--settings-border);
+    border: 1px solid var(--sheet-border);
     border-radius: 7px;
     background: color-mix(in srgb, var(--bg-primary) 52%, transparent);
     padding: 8px 10px;
@@ -613,9 +571,9 @@
   }
   .settings-empty-state,
   .settings-error-state {
-    border: 1px solid var(--settings-border);
+    border: 1px solid var(--sheet-border);
     border-radius: 8px;
-    background: var(--settings-row-bg);
+    background: var(--sheet-row-bg);
     padding: 14px 12px;
     color: var(--text-secondary);
     font-size: 12px;

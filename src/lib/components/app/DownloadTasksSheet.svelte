@@ -180,21 +180,21 @@
 
 <Sheet.Root bind:open>
   <Sheet.Content
-    class="app-side-sheet download-sheet gap-0 overflow-hidden border-[var(--download-border)] bg-[var(--surface-sheet)] p-0 text-[var(--text-primary)] shadow-[0_24px_64px_rgba(15,23,42,0.18)] backdrop-blur-xl"
+    class="app-side-sheet download-sheet gap-0 overflow-hidden border-[var(--sheet-border)] bg-[var(--surface-sheet)] p-0 text-[var(--text-primary)] shadow-[0_24px_64px_rgba(15,23,42,0.18)] backdrop-blur-xl"
   >
-    <Sheet.Header class="download-sheet-header">
+    <Sheet.Header class="sheet-header">
       <Sheet.Title>{labels.title}</Sheet.Title>
       <Sheet.Description>{labels.description}</Sheet.Description>
     </Sheet.Header>
-    <div class="download-sheet-body">
-      <section class="download-filter-section">
+    <div class="sheet-body">
+      <section class="sheet-section download-filter-section">
         <div class="download-search-field">
           <SearchIcon aria-hidden="true" />
           <Input
             bind:value={searchQuery}
             placeholder={labels.searchLabel}
             aria-label={labels.searchLabel}
-            class="download-search-input h-9 border-[var(--download-border)] bg-[var(--download-control-bg)]"
+            class="download-search-input h-9 border-[var(--sheet-border)] bg-[var(--sheet-control-bg)]"
             style="padding-left: 38px;"
           />
         </div>
@@ -202,9 +202,9 @@
           <Select.Root type="single" bind:value={scopeFilter}
             ><Select.Trigger
               aria-label={labels.filterScopeAria}
-              class="download-filter-trigger h-9 w-full border-[var(--download-border)] bg-[var(--download-control-bg)]"
+              class="sheet-select-trigger h-9 w-full border-[var(--sheet-border)]"
               >{currentScopeLabel}</Select.Trigger
-            ><Select.Content class="download-filter-select-content"
+            ><Select.Content class="sheet-select-content"
               >{#each scopeOptions as option (option.value)}<Select.Item
                   value={option.value}
                   label={option.label}
@@ -214,9 +214,9 @@
           <Select.Root type="single" bind:value={statusFilter}
             ><Select.Trigger
               aria-label={labels.filterStatusAria}
-              class="download-filter-trigger h-9 w-full border-[var(--download-border)] bg-[var(--download-control-bg)]"
+              class="sheet-select-trigger h-9 w-full border-[var(--sheet-border)]"
               >{currentStatusLabel}</Select.Trigger
-            ><Select.Content class="download-filter-select-content"
+            ><Select.Content class="sheet-select-content"
               >{#each statusOptions as option (option.value)}<Select.Item
                   value={option.value}
                   label={option.label}
@@ -226,9 +226,9 @@
           <Select.Root type="single" bind:value={kindFilter}
             ><Select.Trigger
               aria-label={labels.filterKindAria}
-              class="download-filter-trigger h-9 w-full border-[var(--download-border)] bg-[var(--download-control-bg)]"
+              class="sheet-select-trigger h-9 w-full border-[var(--sheet-border)]"
               >{currentKindLabel}</Select.Trigger
-            ><Select.Content class="download-filter-select-content"
+            ><Select.Content class="sheet-select-content"
               >{#each kindOptions as option (option.value)}<Select.Item
                   value={option.value}
                   label={option.label}
@@ -253,7 +253,10 @@
             {@const kindLabel = getJobKindLabel(job)}
             {@const summaryLabel = getJobSummaryLabel(job)}
             {@const errorSummary = getJobErrorSummary(job)}
-            <section class="download-job-card" data-status={job.status}>
+            <section
+              class="sheet-section download-job-card"
+              data-status={job.status}
+            >
               <div class="download-job-header">
                 <div class="download-job-copy">
                   <div class="download-job-meta">
@@ -361,50 +364,8 @@
 </Sheet.Root>
 
 <style>
-  :global(.download-sheet) {
-    --download-border: color-mix(in srgb, var(--border) 78%, white 22%);
-    --download-section-bg: color-mix(
-      in srgb,
-      var(--bg-secondary) 76%,
-      transparent
-    );
-    --download-control-bg: color-mix(
-      in srgb,
-      var(--bg-primary) 54%,
-      transparent
-    );
-    --download-row-bg: color-mix(in srgb, var(--bg-primary) 42%, transparent);
-    --download-row-hover-bg: color-mix(
-      in srgb,
-      var(--bg-primary) 56%,
-      transparent
-    );
-  }
-  :global(.download-sheet-header) {
-    padding: 18px 48px 14px 18px;
-    border-bottom: 1px solid var(--download-border);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-tint-strong) 72%, transparent),
-      transparent
-    );
-  }
-  .download-sheet-body {
-    display: flex;
-    min-height: 0;
-    flex: 1;
-    flex-direction: column;
-    gap: 12px;
-    overflow-y: auto;
-    padding: 14px 14px 18px;
-  }
   .download-filter-section {
-    display: grid;
     gap: 10px;
-    border: 1px solid var(--download-border);
-    border-radius: 8px;
-    background: var(--download-section-bg);
-    padding: 12px;
   }
   .download-search-field {
     position: relative;
@@ -428,104 +389,6 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
-  :global(.download-filter-trigger) {
-    min-width: 0;
-    border-radius: 7px;
-    background: color-mix(in srgb, var(--download-row-bg) 88%, transparent);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, white 28%, transparent);
-    color: var(--text-primary);
-    padding-inline: 10px 8px;
-    transition:
-      background var(--motion-fast) var(--ease-standard),
-      border-color var(--motion-fast) var(--ease-standard),
-      box-shadow var(--motion-fast) var(--ease-standard);
-  }
-  :global(.download-filter-trigger:hover),
-  :global(.download-filter-trigger[data-state='open']) {
-    border-color: color-mix(in srgb, var(--accent) 18%, var(--download-border));
-    background: color-mix(
-      in srgb,
-      var(--download-row-hover-bg) 92%,
-      transparent
-    );
-  }
-  :global(.download-filter-trigger:focus-visible) {
-    border-color: color-mix(in srgb, var(--accent) 32%, var(--download-border));
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
-      0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
-  }
-  :global(.download-filter-trigger svg) {
-    color: var(--text-tertiary);
-  }
-  :global(.download-filter-select-content) {
-    z-index: 210;
-    min-width: var(--bits-select-anchor-width);
-    border: 1px solid var(--download-border);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--surface-sheet) 86%, transparent);
-    color: var(--text-primary);
-    padding: 4px;
-    box-shadow:
-      0 18px 40px rgba(15, 23, 42, 0.16),
-      inset 0 1px 0 color-mix(in srgb, white 38%, transparent);
-    transform-origin: var(--bits-select-content-transform-origin);
-    backdrop-filter: blur(18px) saturate(1.16);
-    will-change: opacity, transform;
-  }
-  :global(.download-filter-select-content [data-slot='select-item']) {
-    min-height: 28px;
-    border-radius: 6px;
-    color: var(--text-primary);
-    padding: 5px 30px 5px 9px;
-    font-size: 12px;
-    line-height: 1.35;
-  }
-  :global(
-    .download-filter-select-content [data-slot='select-item'][data-highlighted]
-  ),
-  :global(.download-filter-select-content [data-slot='select-item']:focus) {
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
-    color: var(--text-primary);
-  }
-  :global(
-    .download-filter-select-content
-      [data-slot='select-item'][data-state='checked']
-  ) {
-    color: var(--text-primary);
-    font-weight: 600;
-  }
-  :global(.download-filter-select-content [data-slot='select-item'] svg) {
-    color: var(--accent);
-  }
-  :global(.download-filter-select-content[data-state='open']) {
-    animation-duration: var(--motion-fast);
-    animation-fill-mode: both;
-    animation-timing-function: var(--ease-decelerate);
-  }
-  :global(
-    .download-filter-select-content[data-state='open'][data-side='bottom']
-  ) {
-    animation-name: download-filter-select-in-bottom;
-  }
-  :global(.download-filter-select-content[data-state='open'][data-side='top']) {
-    animation-name: download-filter-select-in-top;
-  }
-  :global(.download-filter-select-content[data-state='closed']) {
-    animation-duration: var(--motion-fast);
-    animation-fill-mode: both;
-    animation-timing-function: var(--ease-standard);
-  }
-  :global(
-    .download-filter-select-content[data-state='closed'][data-side='bottom']
-  ) {
-    animation-name: download-filter-select-out-bottom;
-  }
-  :global(
-    .download-filter-select-content[data-state='closed'][data-side='top']
-  ) {
-    animation-name: download-filter-select-out-top;
-  }
   :global(.download-clear-history) {
     justify-self: end;
   }
@@ -534,23 +397,18 @@
     gap: 12px;
   }
   .download-job-card {
-    display: grid;
     gap: 12px;
-    border: 1px solid var(--download-border);
-    border-radius: 8px;
-    background: var(--download-section-bg);
-    padding: 12px;
   }
   .download-job-card[data-status='running'],
   .download-job-card[data-status='queued'] {
-    border-color: color-mix(in srgb, var(--accent) 28%, var(--download-border));
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--sheet-border));
   }
   .download-job-card[data-status='failed'],
   .download-job-card[data-status='partiallyFailed'] {
     border-color: color-mix(
       in srgb,
       var(--destructive) 42%,
-      var(--download-border)
+      var(--sheet-border)
     );
   }
   .download-job-header {
@@ -571,7 +429,7 @@
     min-width: 0;
   }
   :global(.download-kind-badge) {
-    background: var(--download-row-bg);
+    background: var(--sheet-row-bg);
     color: var(--text-primary);
   }
   .download-status-pill {
@@ -632,9 +490,9 @@
   }
   .download-task-list {
     overflow: hidden;
-    border: 1px solid var(--download-border);
+    border: 1px solid var(--sheet-border);
     border-radius: 8px;
-    background: var(--download-row-bg);
+    background: var(--sheet-row-bg);
   }
   .download-task-row {
     display: grid;
@@ -646,10 +504,10 @@
     transition: background var(--motion-fast) var(--ease-standard);
   }
   .download-task-row + .download-task-row {
-    border-top: 1px solid var(--download-border);
+    border-top: 1px solid var(--sheet-border);
   }
   .download-task-row:hover {
-    background: var(--download-row-hover-bg);
+    background: var(--sheet-row-hover-bg);
   }
   .download-task-copy {
     display: grid;
@@ -703,9 +561,9 @@
     place-items: center;
     align-content: center;
     min-height: 260px;
-    border: 1px solid var(--download-border);
+    border: 1px solid var(--sheet-border);
     border-radius: 8px;
-    background: var(--download-section-bg);
+    background: var(--sheet-section-bg);
     padding: 28px 18px;
     text-align: center;
   }
@@ -739,51 +597,6 @@
     .download-task-side span {
       max-width: none;
       text-align: left;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    :global(.download-filter-select-content[data-state]) {
-      animation: none;
-    }
-  }
-  @keyframes -global-download-filter-select-in-bottom {
-    from {
-      opacity: 0;
-      transform: translateY(-5px) scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-  @keyframes -global-download-filter-select-in-top {
-    from {
-      opacity: 0;
-      transform: translateY(5px) scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-  @keyframes -global-download-filter-select-out-bottom {
-    from {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translateY(-5px) scale(0.98);
-    }
-  }
-  @keyframes -global-download-filter-select-out-top {
-    from {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translateY(5px) scale(0.98);
     }
   }
 </style>
