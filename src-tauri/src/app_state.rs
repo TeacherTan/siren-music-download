@@ -1,6 +1,8 @@
+use crate::album_metadata_cache::AlbumMetadataCacheService;
 use crate::audio_cache;
 use crate::download_session::DownloadSessionStore;
 use crate::i18n;
+use crate::listening_history::ListeningHistoryService;
 use crate::local_inventory::LocalInventoryService;
 use crate::local_inventory_provenance::LocalInventoryProvenanceStore;
 use crate::logging::{LogCenter, LogLevel, LogPayload};
@@ -34,6 +36,8 @@ pub struct AppState {
     pub(crate) preferences: Arc<StdMutex<AppPreferences>>,
     pub(crate) log_center: Arc<LogCenter>,
     pub(crate) library_search_service: LibrarySearchService,
+    pub(crate) listening_history: Arc<ListeningHistoryService>,
+    pub(crate) album_metadata_cache: AlbumMetadataCacheService,
 }
 
 struct PreparedPlaybackInput {
@@ -70,6 +74,13 @@ impl AppState {
         let search_data_dir = app_data_dir.join("library-search");
         let library_search_service =
             LibrarySearchService::new(search_data_dir, preferences.output_dir.clone());
+        let db_path = app_data_dir.join("siren_local.db");
+        let listening_history = Arc::new(
+            ListeningHistoryService::new(&db_path)
+                .map_err(|e| format!("初始化收听历史服务失败: {e}"))?,
+        );
+        let album_metadata_cache = AlbumMetadataCacheService::new(&db_path)
+            .map_err(|e| format!("初始化元数据缓存服务失败: {e}"))?;
         let state = Self {
             player: Arc::new(player),
             api: Arc::new(api),
@@ -81,6 +92,8 @@ impl AppState {
             preferences: Arc::new(StdMutex::new(preferences)),
             log_center,
             library_search_service,
+            listening_history,
+            album_metadata_cache,
         };
         if loaded_download_session.should_persist {
             state.persist_download_snapshot(&loaded_download_session.snapshot);
@@ -192,7 +205,7 @@ impl AppState {
                 song_cid.clone(),
                 song_detail.name.clone(),
                 song_detail.artists.clone(),
-                cover_url,
+                cover_url.clone(),
                 0.0,
                 None,
             )
@@ -205,7 +218,28 @@ impl AppState {
         .await;
 
         match result {
-            Ok(duration) => Ok(duration),
+            Ok(duration) => {
+                let listening_event = siren_core::ListeningEvent {
+                    song_cid: song_cid.clone(),
+                    song_name: song_detail.name.clone(),
+                    album_cid: song_detail.album_cid.clone(),
+                    album_name: String::new(),
+                    cover_url: cover_url.clone(),
+                    artists: song_detail.artists.clone(),
+                };
+                if let Err(e) = self.listening_history.record(&listening_event) {
+                    self.log_center.record(
+                        LogPayload::new(
+                            LogLevel::Warn,
+                            "listening-history",
+                            "listening_history.record_failed",
+                            "Failed to record listening history",
+                        )
+                        .details(e),
+                    );
+                }
+                Ok(duration)
+            }
             Err(error) => {
                 self.player.fail_session(session_id);
                 Err(error.to_string())
