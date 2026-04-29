@@ -48,6 +48,11 @@ mod preferences;
 mod search;
 mod theme;
 
+/// 启动 belong 预热后台任务。
+///
+/// 适用于应用启动阶段在后台异步预热 belong 缓存，以便首页"按系列浏览"功能在用户打开时
+/// 能够立即展示分组数据。
+pub use app_state::spawn_belong_warmup;
 /// 应用级共享状态入口。
 ///
 /// 适用于 `main.rs` 启动 wiring、Tauri command 注入，以及需要访问聚合后端能力的集成测试入口。

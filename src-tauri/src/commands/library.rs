@@ -24,6 +24,7 @@ pub async fn get_albums(state: State<'_, AppState>) -> Result<Vec<siren_core::ap
 /// 适用于进入专辑详情页、刷新当前专辑信息或在下载后重新拉取专辑展示数据。
 /// 入参 `album_cid` 为上游专辑唯一标识；返回值为已补齐本地库存状态的专辑详情。
 /// 调用方应确保 `album_cid` 来自有效列表项；若 CID 无效或上游请求失败，将返回错误字符串。
+/// 该接口会在成功获取详情后顺带更新 belong 缓存（尽力而为，失败不影响主流程返回值）。
 #[tauri::command]
 pub async fn get_album_detail(
     state: State<'_, AppState>,
@@ -34,6 +35,7 @@ pub async fn get_album_detail(
         .get_album_detail(&album_cid)
         .await
         .map_err(|e| e.to_string())?;
+    let _ = state.album_metadata_cache.upsert_belong(&album.cid, &album.belong);
     Ok(state
         .local_inventory_service
         .enrich_album_detail(album)

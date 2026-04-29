@@ -16,7 +16,7 @@ use souvlaki::{MediaControlEvent, SeekDirection};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex as StdMutex};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 /// 应用运行期间共享的后端状态容器。
@@ -683,6 +683,109 @@ impl AppState {
             start_position_secs,
         )
     }
+}
+
+/// 启动 belong 预热后台任务。
+///
+/// 获取全量专辑列表，找出缓存中缺失的专辑，并发获取其详情以填充 belong 缓存。
+/// 完成后向前端发送 `homepage-belong-ready` 事件。
+///
+/// 适用于应用启动阶段在后台异步预热 belong 缓存，以便首页"按系列浏览"功能在用户打开时
+/// 能够立即展示分组数据，而不需要等待实时拉取。
+/// 入参 `app_handle` 用于在任务完成后向前端发送事件；`state` 提供 API 客户端、缓存服务与日志中心。
+/// 该函数立即返回，实际工作在后台 tokio 任务中异步执行；调用方无需等待其完成。
+/// 若获取专辑列表或查询缺失 CID 失败，任务会记录警告日志后提前退出，不会 panic。
+/// 并发度上限为 5，避免对上游 API 造成过大压力。
+pub fn spawn_belong_warmup(app_handle: tauri::AppHandle, state: &AppState) {
+    let api = state.api.clone();
+    let cache = state.album_metadata_cache.clone();
+    let log_center = state.log_center.clone();
+
+    tokio::spawn(async move {
+        let albums = match api.get_albums().await {
+            Ok(albums) => albums,
+            Err(e) => {
+                log_center.record(
+                    LogPayload::new(
+                        LogLevel::Warn,
+                        "homepage",
+                        "homepage.belong_warmup_albums_failed",
+                        "belong 预热: 获取专辑列表失败",
+                    )
+                    .details(e.to_string()),
+                );
+                return;
+            }
+        };
+
+        let all_cids: Vec<String> = albums.iter().map(|a| a.cid.clone()).collect();
+        let missing = match cache.get_missing_album_cids(&all_cids) {
+            Ok(m) => m,
+            Err(e) => {
+                log_center.record(
+                    LogPayload::new(
+                        LogLevel::Warn,
+                        "homepage",
+                        "homepage.belong_warmup_missing_cids_failed",
+                        "belong 预热: 查询缺失 CID 失败",
+                    )
+                    .details(e),
+                );
+                return;
+            }
+        };
+
+        if missing.is_empty() {
+            let _ = app_handle.emit("homepage-belong-ready", ());
+            return;
+        }
+
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+        let mut handles = Vec::new();
+
+        for cid in missing {
+            let api = api.clone();
+            let cache = cache.clone();
+            let permit = semaphore.clone();
+            let log_center = log_center.clone();
+
+            handles.push(tokio::spawn(async move {
+                let _permit = permit.acquire().await;
+                match api.get_album_detail(&cid).await {
+                    Ok(detail) => {
+                        if let Err(e) = cache.upsert_belong(&cid, &detail.belong) {
+                            log_center.record(
+                                LogPayload::new(
+                                    LogLevel::Warn,
+                                    "homepage",
+                                    "homepage.belong_warmup_upsert_failed",
+                                    "belong 预热: 写入缓存失败",
+                                )
+                                .details(format!("{cid}: {e}")),
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log_center.record(
+                            LogPayload::new(
+                                LogLevel::Warn,
+                                "homepage",
+                                "homepage.belong_warmup_detail_failed",
+                                "belong 预热: 获取专辑详情失败",
+                            )
+                            .details(format!("{cid}: {e}")),
+                        );
+                    }
+                }
+            }));
+        }
+
+        for handle in handles {
+            let _ = handle.await;
+        }
+
+        let _ = app_handle.emit("homepage-belong-ready", ());
+    });
 }
 
 fn normalize_seek_position(position_secs: f64, duration_secs: f64) -> f64 {
