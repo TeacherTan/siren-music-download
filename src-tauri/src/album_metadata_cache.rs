@@ -19,8 +19,8 @@ pub(crate) struct AlbumMetadataCacheService {
 
 impl AlbumMetadataCacheService {
     pub(crate) fn new(db_path: &std::path::Path) -> Result<Self, String> {
-        let conn = Connection::open(db_path)
-            .map_err(|e| format!("打开元数据缓存数据库失败: {e}"))?;
+        let conn =
+            Connection::open(db_path).map_err(|e| format!("打开元数据缓存数据库失败: {e}"))?;
         let service = Self {
             conn: Arc::new(Mutex::new(conn)),
         };
@@ -30,8 +30,7 @@ impl AlbumMetadataCacheService {
 
     #[cfg(test)]
     fn new_in_memory() -> Result<Self, String> {
-        let conn = Connection::open_in_memory()
-            .map_err(|e| format!("创建内存数据库失败: {e}"))?;
+        let conn = Connection::open_in_memory().map_err(|e| format!("创建内存数据库失败: {e}"))?;
         let service = Self {
             conn: Arc::new(Mutex::new(conn)),
         };
@@ -40,7 +39,10 @@ impl AlbumMetadataCacheService {
     }
 
     fn initialize_schema(&self) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| format!("获取数据库锁失败: {e}"))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| format!("获取数据库锁失败: {e}"))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS album_metadata_cache (
                 album_cid TEXT PRIMARY KEY,
@@ -53,7 +55,10 @@ impl AlbumMetadataCacheService {
     }
 
     pub(crate) fn upsert_belong(&self, album_cid: &str, belong: &str) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| format!("获取数据库锁失败: {e}"))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| format!("获取数据库锁失败: {e}"))?;
         let now = time::OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Iso8601::DEFAULT)
             .unwrap_or_default();
@@ -68,11 +73,16 @@ impl AlbumMetadataCacheService {
     }
 
     pub(crate) fn batch_upsert_belongs(&self, entries: &[(&str, &str)]) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| format!("获取数据库锁失败: {e}"))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| format!("获取数据库锁失败: {e}"))?;
         let now = time::OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Iso8601::DEFAULT)
             .unwrap_or_default();
-        let tx = conn.unchecked_transaction().map_err(|e| format!("开启事务失败: {e}"))?;
+        let tx = conn
+            .unchecked_transaction()
+            .map_err(|e| format!("开启事务失败: {e}"))?;
         for (album_cid, belong) in entries {
             tx.execute(
                 "INSERT INTO album_metadata_cache (album_cid, belong, updated_at)
@@ -87,7 +97,10 @@ impl AlbumMetadataCacheService {
     }
 
     pub(crate) fn get_all_belongs(&self) -> Result<Vec<AlbumBelongRecord>, String> {
-        let conn = self.conn.lock().map_err(|e| format!("获取数据库锁失败: {e}"))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| format!("获取数据库锁失败: {e}"))?;
         let mut stmt = conn
             .prepare("SELECT album_cid, belong FROM album_metadata_cache")
             .map_err(|e| format!("准备查询语句失败: {e}"))?;
@@ -104,7 +117,10 @@ impl AlbumMetadataCacheService {
         Ok(records)
     }
 
-    pub(crate) fn get_missing_album_cids(&self, all_cids: &[String]) -> Result<Vec<String>, String> {
+    pub(crate) fn get_missing_album_cids(
+        &self,
+        all_cids: &[String],
+    ) -> Result<Vec<String>, String> {
         let cached = self.get_all_belongs()?;
         let cached_set: std::collections::HashSet<&str> =
             cached.iter().map(|r| r.album_cid.as_str()).collect();

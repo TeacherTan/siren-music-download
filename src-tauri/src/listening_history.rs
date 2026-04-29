@@ -16,8 +16,7 @@ pub(crate) struct ListeningHistoryService {
 
 impl ListeningHistoryService {
     pub(crate) fn new(db_path: &Path) -> Result<Self, String> {
-        let conn =
-            Connection::open(db_path).map_err(|e| format!("打开收听历史数据库失败: {e}"))?;
+        let conn = Connection::open(db_path).map_err(|e| format!("打开收听历史数据库失败: {e}"))?;
         let service = Self {
             conn: Mutex::new(conn),
         };
@@ -27,8 +26,7 @@ impl ListeningHistoryService {
 
     #[cfg(test)]
     fn new_in_memory() -> Result<Self, String> {
-        let conn =
-            Connection::open_in_memory().map_err(|e| format!("创建内存数据库失败: {e}"))?;
+        let conn = Connection::open_in_memory().map_err(|e| format!("创建内存数据库失败: {e}"))?;
         let service = Self {
             conn: Mutex::new(conn),
         };
@@ -37,7 +35,10 @@ impl ListeningHistoryService {
     }
 
     fn initialize_schema(&self) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| format!("获取数据库锁失败: {e}"))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| format!("获取数据库锁失败: {e}"))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS listening_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +58,10 @@ impl ListeningHistoryService {
     }
 
     pub(crate) fn record(&self, event: &ListeningEvent) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| format!("获取数据库锁失败: {e}"))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| format!("获取数据库锁失败: {e}"))?;
 
         let last_cid: Option<String> = conn
             .query_row(
@@ -71,8 +75,8 @@ impl ListeningHistoryService {
             return Ok(());
         }
 
-        let artists_json =
-            serde_json::to_string(&event.artists).map_err(|e| format!("序列化 artists 失败: {e}"))?;
+        let artists_json = serde_json::to_string(&event.artists)
+            .map_err(|e| format!("序列化 artists 失败: {e}"))?;
         let now = time::OffsetDateTime::now_utc()
             .format(&time::format_description::well_known::Iso8601::DEFAULT)
             .map_err(|e| format!("格式化时间失败: {e}"))?;
@@ -93,7 +97,9 @@ impl ListeningHistoryService {
         .map_err(|e| format!("写入收听历史失败: {e}"))?;
 
         let count: u32 = conn
-            .query_row("SELECT COUNT(*) FROM listening_history", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM listening_history", [], |row| {
+                row.get(0)
+            })
             .map_err(|e| format!("查询收听历史条数失败: {e}"))?;
 
         if count > MAX_HISTORY_ROWS {
@@ -110,7 +116,10 @@ impl ListeningHistoryService {
     }
 
     pub(crate) fn get_recent(&self, limit: u32) -> Result<Vec<HistoryEntry>, String> {
-        let conn = self.conn.lock().map_err(|e| format!("获取数据库锁失败: {e}"))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| format!("获取数据库锁失败: {e}"))?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, song_cid, song_name, album_cid, album_name, cover_url, artists, played_at
@@ -121,8 +130,7 @@ impl ListeningHistoryService {
         let entries = stmt
             .query_map([limit], |row| {
                 let artists_json: String = row.get(6)?;
-                let artists: Vec<String> =
-                    serde_json::from_str(&artists_json).unwrap_or_default();
+                let artists: Vec<String> = serde_json::from_str(&artists_json).unwrap_or_default();
                 Ok(HistoryEntry {
                     id: row.get(0)?,
                     song_cid: row.get(1)?,
@@ -142,7 +150,10 @@ impl ListeningHistoryService {
     }
 
     pub(crate) fn clear(&self) -> Result<u32, String> {
-        let conn = self.conn.lock().map_err(|e| format!("获取数据库锁失败: {e}"))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| format!("获取数据库锁失败: {e}"))?;
         let deleted = conn
             .execute("DELETE FROM listening_history", [])
             .map_err(|e| format!("清除收听历史失败: {e}"))?;
@@ -206,9 +217,7 @@ mod tests {
     fn truncates_beyond_max_rows() {
         let service = ListeningHistoryService::new_in_memory().unwrap();
         for i in 0..(MAX_HISTORY_ROWS + 5) {
-            service
-                .record(&make_event(&format!("s{i}"), "a1"))
-                .unwrap();
+            service.record(&make_event(&format!("s{i}"), "a1")).unwrap();
         }
         let entries = service.get_recent(MAX_HISTORY_ROWS + 10).unwrap();
         assert_eq!(entries.len() as u32, MAX_HISTORY_ROWS);
@@ -229,9 +238,7 @@ mod tests {
     fn get_recent_respects_limit() {
         let service = ListeningHistoryService::new_in_memory().unwrap();
         for i in 0..10 {
-            service
-                .record(&make_event(&format!("s{i}"), "a1"))
-                .unwrap();
+            service.record(&make_event(&format!("s{i}"), "a1")).unwrap();
         }
         let entries = service.get_recent(3).unwrap();
         assert_eq!(entries.len(), 3);

@@ -35,7 +35,9 @@ pub async fn get_album_detail(
         .get_album_detail(&album_cid)
         .await
         .map_err(|e| e.to_string())?;
-    let _ = state.album_metadata_cache.upsert_belong(&album.cid, &album.belong);
+    let _ = state
+        .album_metadata_cache
+        .upsert_belong(&album.cid, &album.belong);
     Ok(state
         .local_inventory_service
         .enrich_album_detail(album)
