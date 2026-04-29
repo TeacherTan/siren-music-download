@@ -24,14 +24,14 @@
 
 ### 打包文件
 
-| 文件 | 字重 | 格式 |
-|------|------|------|
-| HarmonyOS-Sans-SC-Thin.woff2 | 100 | woff2 |
-| HarmonyOS-Sans-SC-Light.woff2 | 300 | woff2 |
-| HarmonyOS-Sans-SC-Regular.woff2 | 400 | woff2 |
-| HarmonyOS-Sans-SC-Medium.woff2 | 500 | woff2 |
-| HarmonyOS-Sans-SC-Bold.woff2 | 700 | woff2 |
-| HarmonyOS-Sans-SC-Black.woff2 | 900 | woff2 |
+| 文件                            | 字重 | 格式  |
+| ------------------------------- | ---- | ----- |
+| HarmonyOS-Sans-SC-Thin.woff2    | 100  | woff2 |
+| HarmonyOS-Sans-SC-Light.woff2   | 300  | woff2 |
+| HarmonyOS-Sans-SC-Regular.woff2 | 400  | woff2 |
+| HarmonyOS-Sans-SC-Medium.woff2  | 500  | woff2 |
+| HarmonyOS-Sans-SC-Bold.woff2    | 700  | woff2 |
+| HarmonyOS-Sans-SC-Black.woff2   | 900  | woff2 |
 
 预估总体积：+18-24MB（woff2 压缩后）。
 
@@ -112,13 +112,13 @@ body {
 
 当前 CSS 中使用的字重与打包字重的对应关系：
 
-| CSS font-weight | 打包字重 | 使用场景 |
-|---|---|---|
-| 400 | Regular | 默认正文 |
-| 500 | Medium | SongRow、AlbumCard |
-| 600 | 介于 Medium (500) 和 Bold (700) 之间，浏览器合成 | SettingsSheet、AudioPlayer |
-| 700 | Bold | 标题、badge、强调文本 |
-| 800 | 介于 Bold (700) 和 Black (900) 之间，浏览器合成 | AlbumSidebar 单处使用 |
+| CSS font-weight | 打包字重                                         | 使用场景                   |
+| --------------- | ------------------------------------------------ | -------------------------- |
+| 400             | Regular                                          | 默认正文                   |
+| 500             | Medium                                           | SongRow、AlbumCard         |
+| 600             | 介于 Medium (500) 和 Bold (700) 之间，浏览器合成 | SettingsSheet、AudioPlayer |
+| 700             | Bold                                             | 标题、badge、强调文本      |
+| 800             | 介于 Bold (700) 和 Black (900) 之间，浏览器合成  | AlbumSidebar 单处使用      |
 
 全量打包 6 个字重后，渲染引擎有足够的锚点做插值，600 和 800 的合成效果会比只有 3 个字重时好很多。
 
@@ -146,9 +146,9 @@ HarmonyOS Sans 由华为开源，免费商用。仓库托管于 [huawei-fonts/Ha
 
 ## 风险与缓解
 
-| 风险 | 影响 | 缓解措施 |
-|------|------|----------|
-| 安装包体积增长 18-24MB | 用户下载时间增加 | Tauri 桌面应用为一次性安装，可接受 |
-| woff2 在 WebView 中加载耗时 | 首屏文字闪烁 | Tauri 本地文件加载极快（<10ms），实际无感知 |
-| 某些生僻字未覆盖 | 极少数字符 fallback 到 sans-serif | HarmonyOS Sans SC 覆盖 GB18030 常用集，音乐应用场景下几乎不会遇到 |
-| GPL-3.0 许可证疑虑 | 法律风险 | 字体嵌入不构成衍生作品，业界共识；在 LICENSE 中注明来源即可 |
+| 风险                        | 影响                              | 缓解措施                                                          |
+| --------------------------- | --------------------------------- | ----------------------------------------------------------------- |
+| 安装包体积增长 18-24MB      | 用户下载时间增加                  | Tauri 桌面应用为一次性安装，可接受                                |
+| woff2 在 WebView 中加载耗时 | 首屏文字闪烁                      | Tauri 本地文件加载极快（<10ms），实际无感知                       |
+| 某些生僻字未覆盖            | 极少数字符 fallback 到 sans-serif | HarmonyOS Sans SC 覆盖 GB18030 常用集，音乐应用场景下几乎不会遇到 |
+| GPL-3.0 许可证疑虑          | 法律风险                          | 字体嵌入不构成衍生作品，业界共识；在 LICENSE 中注明来源即可       |
