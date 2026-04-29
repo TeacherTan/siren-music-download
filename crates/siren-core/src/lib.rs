@@ -45,6 +45,7 @@ pub mod api;
 pub mod audio;
 pub mod download;
 pub mod downloader;
+pub mod homepage;
 pub mod local_inventory;
 pub mod search;
 
@@ -84,3 +85,5 @@ pub use search::{
     SEARCH_LIBRARY_DEFAULT_LIMIT, SEARCH_LIBRARY_DEFAULT_OFFSET, SEARCH_LIBRARY_MAX_LIMIT,
     SEARCH_LIBRARY_MAX_OFFSET, SEARCH_LIBRARY_QUERY_MAX_LENGTH,
 };
+/// 首页数据结构：系列分组、收听历史、收听事件与状态仪表盘。
+pub use homepage::{HistoryEntry, HomepageStatus, ListeningEvent, SeriesGroup};
