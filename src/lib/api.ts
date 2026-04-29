@@ -25,6 +25,9 @@ import type {
   LogFileStatus,
   SearchLibraryRequest,
   SearchLibraryResponse,
+  SeriesGroup,
+  HistoryEntry,
+  HomepageStatus,
 } from './types';
 
 const CACHE_KEY_ALBUM_DETAIL = 'album_detail:';
@@ -291,4 +294,24 @@ export async function listLogRecords(
 
 export async function getLogFileStatus(): Promise<LogFileStatus> {
   return invoke<LogFileStatus>('get_log_file_status');
+}
+
+export async function getLatestAlbums(limit: number): Promise<Album[]> {
+  return invoke<Album[]>('get_latest_albums', { limit });
+}
+
+export async function getAlbumsBySeriesGroup(): Promise<SeriesGroup[]> {
+  return invoke<SeriesGroup[]>('get_albums_by_series');
+}
+
+export async function getRecentHistory(limit: number): Promise<HistoryEntry[]> {
+  return invoke<HistoryEntry[]>('get_recent_history', { limit });
+}
+
+export async function clearListeningHistory(): Promise<number> {
+  return invoke<number>('clear_listening_history');
+}
+
+export async function getHomepageStatus(): Promise<HomepageStatus> {
+  return invoke<HomepageStatus>('get_homepage_status');
 }

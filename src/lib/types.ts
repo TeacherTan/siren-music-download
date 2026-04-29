@@ -326,3 +326,28 @@ export type NotificationPermissionState =
   | 'denied'
   | 'prompt'
   | 'prompt-with-rationale';
+
+export interface SeriesGroup {
+  series: string;
+  albums: Album[];
+}
+
+export interface HistoryEntry {
+  id: number;
+  songCid: string;
+  songName: string;
+  albumCid: string;
+  albumName: string;
+  coverUrl: string | null;
+  artists: string[];
+  playedAt: string;
+}
+
+export interface HomepageStatus {
+  platformAlbumCount: number;
+  platformSongCount: number;
+  localDownloadedCount: number;
+  localStorageBytes: number;
+  activeDownloadCount: number;
+  completedDownloadCount: number;
+}
