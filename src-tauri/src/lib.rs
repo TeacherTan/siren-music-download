@@ -37,6 +37,7 @@ pub mod commands;
 mod download_session;
 mod downloads;
 mod i18n;
+mod listening_history;
 mod local_inventory;
 mod local_inventory_provenance;
 mod logging;

@@ -35,6 +35,7 @@ walkdir = "2"
 tempfile = "3"
 tantivy = "0.22"
 pinyin = { version = "0.11", default-features = false, features = ["plain"] }
+rusqlite = { version = "0.34", features = ["bundled"] }
 fluent-templates = "0.14.0"
 unic-langid = "0.9.6"
 
