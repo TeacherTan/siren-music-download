@@ -31,6 +31,7 @@
 //! 业务语义本身仍尽量下沉到 `siren_core`，因此当你需要修改下载模型、搜索结果或音频写盘契约时，
 //! 通常应该优先检查 `siren_core` 的公开 API，再回到这里看宿主层如何接入。
 
+mod album_metadata_cache;
 mod app_state;
 mod audio_cache;
 pub mod commands;
