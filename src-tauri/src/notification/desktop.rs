@@ -1,7 +1,7 @@
 //! 基于 Tauri 插件的 Windows/Linux 跨平台通知实现。
 
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
 
 pub fn show_playback(
